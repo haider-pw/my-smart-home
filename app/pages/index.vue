@@ -89,6 +89,53 @@ const kpis = computed(() => {
 
 const recommendations = computed(() => (summary.value ? buildRecommendations(summary.value) : []))
 const isTouMeter = computed(() => summary.value?.tariff.config.meterType === 'tou')
+
+// ── Freshness: the underlying data advances every 5 min (poller), so the
+// page refetches every 60s while visible and immediately on tab return —
+// crucial for the installed PWA, which keeps pages alive for hours.
+const REFRESH_MS = 60_000
+const now = ref(Date.now())
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+let clockTimer: ReturnType<typeof setInterval> | null = null
+
+function refreshAll() {
+  if (document.hidden) {
+    return
+  }
+  refreshSummary()
+}
+
+function onVisibility() {
+  if (!document.hidden) {
+    refreshAll()
+  }
+}
+
+onMounted(() => {
+  refreshTimer = setInterval(refreshAll, REFRESH_MS)
+  clockTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 10_000)
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onBeforeUnmount(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+  }
+  if (clockTimer) {
+    clearInterval(clockTimer)
+  }
+  document.removeEventListener('visibilitychange', onVisibility)
+})
+
+const freshness = computed(() => {
+  const at = summary.value?.health.lastPollAt
+  if (!at) {
+    return null
+  }
+  const mins = Math.max(0, Math.round((now.value - at) / 60000))
+  return mins === 0 ? 'just now' : `${mins} min ago`
+})
 </script>
 
 <template>
@@ -145,6 +192,19 @@ const isTouMeter = computed(() => summary.value?.tariff.config.meterType === 'to
     </div>
 
     <template v-else-if="summary">
+      <div class="flex items-center justify-end -mb-2">
+        <span
+          v-if="freshness"
+          class="microlabel text-dimmed flex items-center gap-1.5"
+        >
+          <span
+            class="size-1.5 rounded-full"
+            :class="summary.health.pollStale ? 'bg-[#ffbc57]' : 'bg-[#34e8a4]'"
+          />
+          data {{ freshness }} · auto-refreshes
+        </span>
+      </div>
+
       <!-- Hero: gauge + recommendations -->
       <div class="grid lg:grid-cols-2 gap-4 sm:gap-5">
         <div class="panel p-5">
