@@ -52,3 +52,11 @@ export function formatMonthLong(month: string): string {
   }
   return `${MONTHS_LONG[m - 1]} ${match[1]}`
 }
+
+/** Consistent series colors for metered devices across every chart/table. */
+export const DEVICE_SERIES_COLORS = ['#a98bff', '#34e8a4', '#ffbc57', '#4ad4ff'] as const
+export const BASELINE_COLOR = '#6b7a8b'
+
+export function deviceColor(index: number): string {
+  return DEVICE_SERIES_COLORS[index % DEVICE_SERIES_COLORS.length]!
+}
