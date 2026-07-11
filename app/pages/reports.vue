@@ -73,6 +73,7 @@ interface BillRow {
   effectiveRatePkr: number | null
   source: string
   measuredKwh: number | null
+  coveragePct: number | null
   deltaPct: number | null
   archiveKey: string | null
 }
@@ -290,7 +291,16 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
                 {{ bill.units ?? '—' }}
               </td>
               <td class="py-2 pr-3 text-right num text-muted">
-                {{ bill.measuredKwh !== null ? Math.round(bill.measuredKwh) : '—' }}
+                <template v-if="bill.measuredKwh !== null">
+                  {{ (bill.coveragePct ?? 100) < 95 ? '~' : '' }}{{ Math.round(bill.measuredKwh) }}
+                  <span
+                    v-if="(bill.coveragePct ?? 100) < 95"
+                    class="microlabel text-dimmed !text-[8px]"
+                  >{{ bill.coveragePct }}% cov</span>
+                </template>
+                <template v-else>
+                  —
+                </template>
               </td>
               <td
                 class="py-2 pr-3 text-right num"
