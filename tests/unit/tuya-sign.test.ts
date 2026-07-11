@@ -66,6 +66,12 @@ describe('buildPathWithQuery', () => {
 
     expect(path).toBe('/v1.0/devices?name=AC%20one')
   })
+
+  it('keeps commas raw in list values — Tuya signs them unencoded', () => {
+    const path = buildPathWithQuery('/v1.0/devices/x/logs', { type: '1,2', size: 100 })
+
+    expect(path).toBe('/v1.0/devices/x/logs?size=100&type=1,2')
+  })
 })
 
 describe('buildStringToSign', () => {

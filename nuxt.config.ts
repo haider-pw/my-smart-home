@@ -2,7 +2,8 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
-    '@nuxt/ui'
+    '@nuxt/ui',
+    '@nuxthub/core'
   ],
 
   devtools: {
@@ -18,7 +19,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-only secrets — set via NUXT_* environment variables (.env locally,
-    // `wrangler secret` in production). NEVER hardcode values here.
+    // `wrangler secret` / NuxtHub env in production). NEVER hardcode values here.
     tuya: {
       clientId: '',
       clientSecret: '',
@@ -30,10 +31,28 @@ export default defineNuxtConfig({
       allowedIps: '',
       appPin: '',
       sessionSecret: ''
+    },
+    ingest: {
+      // Shared secret for /api/ingest (homelab relay) and admin endpoints
+      secret: ''
     }
   },
 
   compatibilityDate: '2026-06-30',
+
+  nitro: {
+    experimental: {
+      tasks: true
+    }
+    // No platform cron on Vercel Hobby — the 5-min poll is driven by an
+    // external scheduler hitting POST /api/admin/poll (see README).
+  },
+
+  hub: {
+    // sqlite everywhere: local file in dev, Turso (libsql) in production
+    // via TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars on Vercel
+    db: 'sqlite'
+  },
 
   eslint: {
     config: {
