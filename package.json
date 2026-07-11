@@ -28,6 +28,7 @@
     "@nuxt/eslint": "^1.16.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.6.0",
+    "playwright": "^1.61.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "vue-tsc": "^3.3.5",

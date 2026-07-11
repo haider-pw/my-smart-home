@@ -61,14 +61,23 @@ const option = computed(() => {
 </script>
 
 <template>
-  <ClientOnly>
+  <div
+    v-if="points.length === 0"
+    class="grid place-items-center text-muted text-sm"
+    style="height: 224px"
+  >
+    No data in this range yet — the poller is collecting.
+  </div>
+  <ClientOnly v-else>
+    <!-- vue-echarts sets inline height:100% — explicit style wins over classes -->
     <VChart
       :option="option"
       :autoresize="true"
-      class="h-56 w-full"
+      class="w-full"
+      :style="{ height: '224px', width: '100%' }"
     />
     <template #fallback>
-      <div class="h-56" />
+      <div style="height: 224px" />
     </template>
   </ClientOnly>
 </template>

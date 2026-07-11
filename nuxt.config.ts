@@ -49,9 +49,23 @@ export default defineNuxtConfig({
   },
 
   hub: {
-    // sqlite everywhere: local file in dev, Turso (libsql) in production
-    // via TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars on Vercel
-    db: 'sqlite'
+    // sqlite everywhere: local file in dev, Turso (libsql) in production.
+    //
+    // WATT_DB_URL/WATT_DB_TOKEN (when set) pin production to ONE permanent
+    // Turso database. This deliberately bypasses the Vercel↔Turso marketplace
+    // integration's TURSO_* variables: those point at a FRESH database branch
+    // on every production deployment, silently resetting all history.
+    // An explicit connection wins over env-var detection inside NuxtHub.
+    db: process.env.WATT_DB_URL
+      ? {
+          dialect: 'sqlite' as const,
+          driver: 'libsql' as const,
+          connection: {
+            url: process.env.WATT_DB_URL,
+            authToken: process.env.WATT_DB_TOKEN
+          }
+        }
+      : 'sqlite'
   },
 
   eslint: {

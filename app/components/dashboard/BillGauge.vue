@@ -59,13 +59,15 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
 <template>
   <div class="relative">
     <ClientOnly>
+      <!-- vue-echarts sets inline height:100% — explicit style wins over classes -->
       <VChart
         :option="option"
         :autoresize="true"
-        class="h-44 w-full"
+        class="w-full"
+        :style="{ height: '176px', width: '100%' }"
       />
       <template #fallback>
-        <div class="h-44" />
+        <div style="height: 176px" />
       </template>
     </ClientOnly>
     <div class="absolute inset-x-0 bottom-1 text-center pointer-events-none">
