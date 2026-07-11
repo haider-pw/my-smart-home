@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { formatMonthLong } from '~/utils/format'
+
 interface ApiEnvelope<T> {
   success: boolean
   data: T | null
@@ -120,7 +122,7 @@ const { data: voltageRes } = await useFetch<ApiEnvelope<VoltageData>>('/api/repo
 })
 
 const trendPoints = computed(() =>
-  (trendRes.value?.data?.points ?? []).map(p => ({ label: (p.day ?? '').slice(5), kwh: p.kwh }))
+  (trendRes.value?.data?.points ?? []).map(p => ({ day: p.day, kwh: p.kwh }))
 )
 
 const compare = computed(() => compareRes.value?.data ?? null)
@@ -276,8 +278,8 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
               :key="bill.billMonth"
               class="border-b border-default/40"
             >
-              <td class="py-2 pr-3 num font-medium">
-                {{ bill.billMonth }}
+              <td class="py-2 pr-3 num font-medium whitespace-nowrap">
+                {{ formatMonthLong(bill.billMonth) }}
                 <UBadge
                   v-if="bill.source === 'current'"
                   variant="subtle"

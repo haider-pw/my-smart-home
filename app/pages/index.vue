@@ -47,7 +47,7 @@ const cycleLabel = computed(() => {
 
 const trendPoints = computed(() =>
   (trendRes.value?.data?.points ?? []).map(p => ({
-    label: (p.day ?? '').slice(5),
+    day: p.day,
     kwh: p.kwh
   }))
 )

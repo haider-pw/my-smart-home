@@ -1,9 +1,16 @@
 <script setup lang="ts">
+import { formatDayLong, formatDayShort } from '~/utils/format'
+
 const props = defineProps<{
-  points: Array<{ label: string, kwh: number }>
+  /** day: PKT 'YYYY-MM-DD' (preferred) — label kept for non-date series */
+  points: Array<{ day?: string, label?: string, kwh: number }>
   paceKwhPerDay?: number
   unitLabel?: string
 }>()
+
+function axisLabel(p: { day?: string, label?: string }): string {
+  return p.day ? formatDayShort(p.day) : p.label ?? ''
+}
 
 const option = computed(() => {
   const pace = props.paceKwhPerDay
@@ -14,11 +21,19 @@ const option = computed(() => {
       backgroundColor: '#0b111a',
       borderColor: 'rgba(255,255,255,.1)',
       textStyle: { color: '#e7eef5', fontFamily: 'IBM Plex Mono', fontSize: 12 },
-      valueFormatter: (v: number) => `${(Math.round(v * 10) / 10).toLocaleString()} kWh`
+      formatter: (params: Array<{ dataIndex: number, value: number }>) => {
+        const first = params[0]
+        if (!first) {
+          return ''
+        }
+        const point = props.points[first.dataIndex]
+        const title = point?.day ? formatDayLong(point.day) : point?.label ?? ''
+        return `<b>${title}</b><br/>${(Math.round(first.value * 10) / 10).toLocaleString()} kWh`
+      }
     },
     xAxis: {
       type: 'category',
-      data: props.points.map(p => p.label),
+      data: props.points.map(p => axisLabel(p)),
       axisLine: { lineStyle: { color: 'rgba(255,255,255,.15)' } },
       axisLabel: { color: '#5b6a7c', fontFamily: 'IBM Plex Mono', fontSize: 10 },
       axisTick: { show: false }
