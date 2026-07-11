@@ -1,7 +1,7 @@
 import { DEFAULT_TARIFF, tariffFromStored, tariffToStored, type TariffConfig } from '../../../shared/utils/tariff'
 import * as schema from '../../db/schema'
 import { useDb } from '../../utils/db'
-import { TARIFF_SETTINGS_KEY } from './tariff.get'
+import { TARIFF_SETTINGS_KEY } from '../../utils/tariff-settings'
 
 function isValidSlabArray(slabs: unknown): boolean {
   return Array.isArray(slabs)
