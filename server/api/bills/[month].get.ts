@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import * as schema from '../../db/schema'
 import { useDb } from '../../utils/db'
-import { r2Get } from '../../utils/r2'
+import { isR2Configured, r2Get } from '../../utils/r2'
 
 /**
  * GET /api/bills/:month — streams the archived original bill (HTML or PDF)
@@ -21,6 +21,10 @@ export default defineEventHandler(async (event) => {
     return { success: false as const, data: null, error: 'No archived document for this month' }
   }
 
+  if (!isR2Configured()) {
+    setResponseStatus(event, 503)
+    return { success: false as const, data: null, error: 'Archive storage not configured — set the NUXT_R2_* environment variables' }
+  }
   const object = await r2Get(bill.archiveKey)
   if (!object) {
     setResponseStatus(event, 404)
