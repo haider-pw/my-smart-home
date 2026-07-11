@@ -62,9 +62,18 @@ export interface BillSyncSummary {
   effectiveRateApplied: number | null
 }
 
-/** Fetch, parse, and upsert the current bill + its 12-month history. */
+/** Fetch (from this server) then ingest. Fails where PITC geo-blocks the host. */
 export async function syncBills(db: Db, referenceNo: string): Promise<BillSyncSummary> {
   const html = await fetchBillHtml(referenceNo)
+  return syncBillsFromHtml(db, html)
+}
+
+/**
+ * Parse + upsert from already-fetched bill HTML — the path used by the
+ * homelab relay (PITC is unreachable from foreign datacenter IPs, so the
+ * homelab fetches on its Pakistani connection and POSTs the HTML here).
+ */
+export async function syncBillsFromHtml(db: Db, html: string): Promise<BillSyncSummary> {
   const parsed: ParsedBill | null = parseIescoBill(html)
   if (!parsed) {
     throw createError({ statusCode: 502, message: 'PITC page did not contain a recognizable bill (invalid reference no?)' })
