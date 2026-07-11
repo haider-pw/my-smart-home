@@ -160,3 +160,29 @@ export const syncState = sqliteTable('sync_state', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at').notNull()
 })
+
+/**
+ * Official IESCO bills scraped from the PITC web bill (current bill full
+ * detail; history rows carry units + amount only). Enables billed-vs-measured
+ * auditing and monthly effective-rate recalibration.
+ */
+export const bills = sqliteTable('bills', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Normalized 'YYYY-MM' */
+  billMonth: text('bill_month').notNull().unique(),
+  units: integer('units'),
+  amountPkr: real('amount_pkr'),
+  paymentPkr: real('payment_pkr'),
+  statusCode: text('status_code'),
+  /** Full-detail fields — present only for the current scraped bill */
+  readingDate: text('reading_date'),
+  issueDate: text('issue_date'),
+  dueDate: text('due_date'),
+  payableAfterDuePkr: real('payable_after_due_pkr'),
+  fpaPkr: real('fpa_pkr'),
+  /** amount ÷ units, when both known */
+  effectiveRatePkr: real('effective_rate_pkr'),
+  /** 'current' | 'history' — how this row was obtained */
+  source: text('source').notNull().default('history'),
+  fetchedAt: integer('fetched_at').notNull()
+})

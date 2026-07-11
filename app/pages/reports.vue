@@ -63,6 +63,50 @@ const { data: trendRes, pending: trendPending } = await useFetch<ApiEnvelope<Tre
 })
 
 const { data: compareRes } = await useFetch<ApiEnvelope<CompareData>>('/api/reports/compare', { lazy: true, retry: 2, retryDelay: 1500 })
+
+interface BillRow {
+  billMonth: string
+  units: number | null
+  amountPkr: number | null
+  effectiveRatePkr: number | null
+  source: string
+  measuredKwh: number | null
+  deltaPct: number | null
+}
+
+const { data: billsRes, refresh: refreshBills } = await useFetch<ApiEnvelope<{ bills: BillRow[], anchorDay: number }>>(
+  '/api/reports/bills',
+  { lazy: true, retry: 2, retryDelay: 1500 }
+)
+
+const fetchingBill = ref(false)
+const toast = useToast()
+async function fetchBill() {
+  if (fetchingBill.value) {
+    return
+  }
+  fetchingBill.value = true
+  try {
+    const res = await $fetch<ApiEnvelope<{ billMonth: string, inserted: number, effectiveRateApplied: number | null }>>(
+      '/api/admin/fetch-bill',
+      { method: 'POST' }
+    )
+    toast.add({
+      title: `Bill ${res.data?.billMonth} fetched`,
+      description: res.data?.effectiveRateApplied
+        ? `${res.data.inserted} history months added · effective rate recalibrated to Rs ${res.data.effectiveRateApplied}/unit`
+        : `${res.data?.inserted ?? 0} history months added`,
+      icon: 'i-lucide-receipt',
+      color: 'success'
+    })
+    await refreshBills()
+  } catch (error: unknown) {
+    const err = error as { data?: { error?: string, message?: string } }
+    toast.add({ title: 'Bill fetch failed', description: err.data?.error ?? err.data?.message ?? 'Unknown error', color: 'error' })
+  } finally {
+    fetchingBill.value = false
+  }
+}
 const { data: voltageRes } = await useFetch<ApiEnvelope<VoltageData>>('/api/reports/voltage', {
   query: computed(() => ({ days: Math.min(days.value, 30) })),
   lazy: true,
@@ -163,6 +207,103 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
           :to="`/api/export/csv?dataset=hourly&days=${days}`"
           external
         />
+      </div>
+    </div>
+
+    <!-- Past bills: official (scraped) vs measured -->
+    <div class="panel p-5">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <h2 class="text-sm font-semibold">
+            Past bills — official vs measured
+          </h2>
+          <p class="microlabel text-dimmed mt-0.5">
+            scraped from the IESCO web bill · effective Rs/unit per month
+          </p>
+        </div>
+        <UButton
+          size="xs"
+          variant="soft"
+          icon="i-lucide-refresh-cw"
+          :loading="fetchingBill"
+          label="Fetch latest bill"
+          @click="fetchBill"
+        />
+      </div>
+      <p
+        v-if="(billsRes?.data?.bills.length ?? 0) === 0"
+        class="text-sm text-muted text-center py-6"
+      >
+        No bills stored yet — hit “Fetch latest bill” to pull the current bill and 12-month history from IESCO.
+      </p>
+      <div
+        v-else
+        class="overflow-x-auto"
+      >
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left microlabel text-dimmed border-b border-default">
+              <th class="py-2 pr-3 font-medium">
+                Month
+              </th>
+              <th class="py-2 pr-3 text-right font-medium">
+                Billed units
+              </th>
+              <th class="py-2 pr-3 text-right font-medium">
+                We measured
+              </th>
+              <th class="py-2 pr-3 text-right font-medium">
+                Δ
+              </th>
+              <th class="py-2 pr-3 text-right font-medium">
+                Amount
+              </th>
+              <th class="py-2 text-right font-medium">
+                Rs/unit
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="bill in billsRes?.data?.bills ?? []"
+              :key="bill.billMonth"
+              class="border-b border-default/40"
+            >
+              <td class="py-2 pr-3 num font-medium">
+                {{ bill.billMonth }}
+                <UBadge
+                  v-if="bill.source === 'current'"
+                  variant="subtle"
+                  size="sm"
+                  class="ml-1.5 microlabel !text-[8px]"
+                >
+                  latest
+                </UBadge>
+              </td>
+              <td class="py-2 pr-3 text-right num">
+                {{ bill.units ?? '—' }}
+              </td>
+              <td class="py-2 pr-3 text-right num text-muted">
+                {{ bill.measuredKwh !== null ? Math.round(bill.measuredKwh) : '—' }}
+              </td>
+              <td
+                class="py-2 pr-3 text-right num"
+                :class="bill.deltaPct === null ? 'text-dimmed' : Math.abs(bill.deltaPct) > 10 ? 'text-[#ff6376]' : 'text-[#34e8a4]'"
+              >
+                {{ bill.deltaPct !== null ? `${bill.deltaPct > 0 ? '+' : ''}${bill.deltaPct}%` : '—' }}
+              </td>
+              <td class="py-2 pr-3 text-right num font-semibold">
+                {{ bill.amountPkr !== null ? `Rs ${Math.round(bill.amountPkr).toLocaleString('en-IN')}` : '—' }}
+              </td>
+              <td
+                class="py-2 text-right num"
+                :class="(bill.effectiveRatePkr ?? 0) > 50 ? 'text-[#ff6376]' : (bill.effectiveRatePkr ?? 0) > 40 ? 'text-[#ffbc57]' : 'text-muted'"
+              >
+                {{ bill.effectiveRatePkr ?? '—' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
