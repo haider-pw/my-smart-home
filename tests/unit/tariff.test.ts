@@ -17,8 +17,8 @@ const PROTECTED = DEFAULT_TARIFF.slabs.protected
 
 describe('slabEnergyCost — fully progressive (depth ∞)', () => {
   it('bills each block at its own rate', () => {
-    // Arrange: 350 units → 100@13.48 + 100@18.95 + 100@24.48 + 50@31.33
-    const expected = 100 * 13.48 + 100 * 18.95 + 100 * 24.48 + 50 * 31.33
+    // Arrange: 350 units → 100@22.44 + 100@28.91 + 100@33.10 + 50@37.99
+    const expected = 100 * 22.44 + 100 * 28.91 + 100 * 33.10 + 50 * 37.99
 
     // Act
     const result = slabEnergyCost(350, UNPROTECTED, Infinity)
@@ -26,13 +26,13 @@ describe('slabEnergyCost — fully progressive (depth ∞)', () => {
     // Assert
     expect(result.cost).toBeCloseTo(expected, 6)
     expect(result.slabIndex).toBe(3)
-    expect(result.marginalRate).toBe(31.33)
+    expect(result.marginalRate).toBe(37.99)
     expect(result.unitsToNextSlab).toBe(50)
   })
 
   it('protected category uses progressive by default config', () => {
-    // 250 protected units → 100@9.80 + 100@13.00 + 50@26.66
-    const expected = 100 * 9.80 + 100 * 13.00 + 50 * 26.66
+    // 250 protected units → 50@3.95 + 50@7.74 + 100@13.01 + 50@33.10
+    const expected = 50 * 3.95 + 50 * 7.74 + 100 * 13.01 + 50 * 33.10
 
     const result = slabEnergyCost(250, PROTECTED, DEFAULT_TARIFF.previousSlabBenefitDepth.protected)
 
@@ -43,7 +43,7 @@ describe('slabEnergyCost — fully progressive (depth ∞)', () => {
 describe('slabEnergyCost — one-previous-slab benefit (NEPRA, depth 1)', () => {
   it('reprices earlier blocks at the previous slab rate', () => {
     // 350 units, depth 1: blocks 0–300 at the 201–300 rate, remainder at own
-    const expected = 300 * 24.48 + 50 * 31.33
+    const expected = 300 * 33.10 + 50 * 37.99
 
     const result = slabEnergyCost(350, UNPROTECTED, 1)
 
@@ -54,22 +54,22 @@ describe('slabEnergyCost — one-previous-slab benefit (NEPRA, depth 1)', () => 
     const at300 = slabEnergyCost(300, UNPROTECTED, 1)
     const at301 = slabEnergyCost(301, UNPROTECTED, 1)
 
-    // 300: 100 repriced @18.95 + 100@18.95 + 100@24.48
-    expect(at300.cost).toBeCloseTo(100 * 18.95 + 100 * 18.95 + 100 * 24.48, 6)
-    // 301: 300 repriced @24.48 + 1@31.33
-    expect(at301.cost).toBeCloseTo(300 * 24.48 + 1 * 31.33, 6)
-    // One extra unit costs over Rs 1,100 — the warning the dashboard exists for
-    expect(at301.cost - at300.cost).toBeGreaterThan(1000)
+    // 300: 100 repriced @28.91 + 100@28.91 + 100@33.10
+    expect(at300.cost).toBeCloseTo(100 * 28.91 + 100 * 28.91 + 100 * 33.10, 6)
+    // 301: 300 repriced @33.10 + 1@37.99
+    expect(at301.cost).toBeCloseTo(300 * 33.10 + 1 * 37.99, 6)
+    // One extra unit costs over Rs 800 — the warning the dashboard exists for
+    expect(at301.cost - at300.cost).toBeGreaterThan(800)
   })
 
   it('first slab has nothing to reprice', () => {
-    expect(slabEnergyCost(80, UNPROTECTED, 1).cost).toBeCloseTo(80 * 13.48, 6)
+    expect(slabEnergyCost(80, UNPROTECTED, 1).cost).toBeCloseTo(80 * 22.44, 6)
   })
 
   it('top slab: marginal at max, no next boundary', () => {
     const result = slabEnergyCost(800, UNPROTECTED, 1)
 
-    expect(result.marginalRate).toBe(41.00)
+    expect(result.marginalRate).toBe(47.69)
     expect(result.unitsToNextSlab).toBe(Infinity)
     expect(result.slabIndex).toBe(7)
   })
@@ -82,19 +82,19 @@ describe('slabEnergyCost — one-previous-slab benefit (NEPRA, depth 1)', () => 
 
 describe('computeBill — surcharge stack', () => {
   it('assembles FPA/QTA/duty/GST/PTV exactly (hand-computed, 100 units)', () => {
-    // energy = 100 × 13.48 = 1348
-    // fpa 250 · qta 150 · other 323 · duty 1348×.015 = 20.22
-    // gstBase 2091.22 · gst 376.4196 · +tvFee 35
+    // energy = 100 × 22.44 = 2244
+    // fpa 250 · qta 150 · other 323 · duty 2244×.015 = 33.66
+    // gstBase 3000.66 · gst 540.1188 · +tvFee 35
     const bill = computeBill({ units: 100 })
 
-    expect(bill.energyCost).toBeCloseTo(1348, 6)
+    expect(bill.energyCost).toBeCloseTo(2244, 6)
     expect(bill.fpa).toBeCloseTo(250, 6)
     expect(bill.qta).toBeCloseTo(150, 6)
     expect(bill.other).toBeCloseTo(323, 6)
-    expect(bill.electricityDuty).toBeCloseTo(20.22, 6)
-    expect(bill.gst).toBeCloseTo(376.4196, 4)
-    expect(bill.total).toBeCloseTo(2502.6396, 3)
-    expect(bill.effectiveRate).toBeCloseTo(25.0264, 3)
+    expect(bill.electricityDuty).toBeCloseTo(33.66, 6)
+    expect(bill.gst).toBeCloseTo(540.1188, 4)
+    expect(bill.total).toBeCloseTo(3575.7788, 3)
+    expect(bill.effectiveRate).toBeCloseTo(35.7578, 3)
   })
 
   it('TOU meter bypasses slabs: peak/off-peak rates apply', () => {
@@ -131,10 +131,14 @@ describe('estimateCostPkr — effective-rate layer wins when configured', () => 
 })
 
 describe('unitsForBudget', () => {
-  it('inverts the slab model: computed units land on the target bill', () => {
+  it('inverts the slab model: best units at or under the target bill', () => {
+    // The depth-1 slab rule makes the bill DISCONTINUOUS at boundaries
+    // (the 301st unit reprices everything below it), so a target inside a
+    // jump gap is unreachable — the solver must stop just below the cliff.
     const units = unitsForBudget(20000, DEFAULT_TARIFF)
 
-    expect(computeBill({ units, config: DEFAULT_TARIFF }).total).toBeCloseTo(20000, 0)
+    expect(computeBill({ units, config: DEFAULT_TARIFF }).total).toBeLessThanOrEqual(20000)
+    expect(computeBill({ units: units + 1, config: DEFAULT_TARIFF }).total).toBeGreaterThan(20000)
   })
 
   it('divides directly under an effective rate', () => {

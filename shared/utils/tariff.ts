@@ -16,8 +16,11 @@
  * `1` (default for unprotected) or `Infinity` (fully progressive) — and the
  * whole config is reconciled against the owner's real bill.
  *
- * Default rates seeded from a 2026 IESCO-style residential schedule — they
- * are STARTING VALUES, editable in settings, never authoritative.
+ * Default rates: NEPRA FY2025-26 notified schedule (SRO July 2025, in force
+ * July 2025 – June 2026; verified against the notified 33.10/37.99/40.22
+ * figures and the Rs ~1.15/unit rebasing cut from the FY2024-25 table).
+ * STARTING VALUES — editable in settings; the owner's paper bill is the
+ * ground truth and the effective-rate layer always wins for cost estimates.
  */
 
 export interface Slab {
@@ -69,19 +72,21 @@ export interface TariffConfig {
 export const DEFAULT_TARIFF: TariffConfig = {
   slabs: {
     unprotected: [
-      { upto: 100, rate: 13.48 },
-      { upto: 200, rate: 18.95 },
-      { upto: 300, rate: 24.48 },
-      { upto: 400, rate: 31.33 },
-      { upto: 500, rate: 35.60 },
-      { upto: 600, rate: 37.80 },
-      { upto: 700, rate: 39.20 },
-      { upto: Infinity, rate: 41.00 }
+      { upto: 100, rate: 22.44 },
+      { upto: 200, rate: 28.91 },
+      { upto: 300, rate: 33.10 },
+      { upto: 400, rate: 37.99 },
+      { upto: 500, rate: 40.22 },
+      { upto: 600, rate: 41.64 },
+      { upto: 700, rate: 42.76 },
+      { upto: Infinity, rate: 47.69 }
     ],
     protected: [
-      { upto: 100, rate: 9.80 },
-      { upto: 200, rate: 13.00 },
-      { upto: Infinity, rate: 26.66 }
+      { upto: 50, rate: 3.95 },
+      { upto: 100, rate: 7.74 },
+      { upto: 200, rate: 13.01 },
+      // protected status ends above 200 units — fallback only
+      { upto: Infinity, rate: 33.10 }
     ]
   },
   previousSlabBenefitDepth: {
