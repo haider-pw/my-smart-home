@@ -62,3 +62,49 @@ export async function r2Get(key: string): Promise<{ body: ReadableStream | null,
   }
   return { body: res.body, contentType: res.headers.get('content-type') ?? 'application/octet-stream' }
 }
+
+/** GET an object as raw bytes; null when missing/unconfigured. */
+export async function r2GetBytes(key: string): Promise<Uint8Array | null> {
+  const got = await r2Get(key)
+  if (!got?.body) {
+    return null
+  }
+  return new Uint8Array(await new Response(got.body).arrayBuffer())
+}
+
+/** List object keys under a prefix (paginates the S3 ListObjectsV2 XML). */
+export async function r2List(prefix: string): Promise<string[]> {
+  const cfg = r2Config()
+  if (!cfg) {
+    return []
+  }
+  const keys: string[] = []
+  let token: string | undefined
+  do {
+    const params = new URLSearchParams({ 'list-type': '2', 'prefix': prefix, 'max-keys': '1000' })
+    if (token) {
+      params.set('continuation-token', token)
+    }
+    const url = `https://${cfg.accountId}.r2.cloudflarestorage.com/${cfg.bucket}?${params.toString()}`
+    const res = await client(cfg).fetch(url)
+    if (!res.ok) {
+      throw createError({ statusCode: 502, message: `R2 LIST: HTTP ${res.status}` })
+    }
+    const xml = await res.text()
+    for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
+      keys.push(m[1]!)
+    }
+    const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml)
+    token = truncated ? xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1] : undefined
+  } while (token)
+  return keys
+}
+
+/** DELETE an object (idempotent). */
+export async function r2Delete(key: string): Promise<void> {
+  const cfg = r2Config()
+  if (!cfg) {
+    return
+  }
+  await client(cfg).fetch(objectUrl(cfg, key), { method: 'DELETE' })
+}
