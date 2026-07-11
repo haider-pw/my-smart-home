@@ -29,7 +29,10 @@ useSeoMeta({
 const links = [
   { label: 'Dashboard', to: '/', icon: 'i-lucide-layout-dashboard' },
   { label: 'Live', to: '/live', icon: 'i-lucide-activity' },
-  { label: 'Explorer', to: '/explorer', icon: 'i-lucide-search-code' }
+  { label: 'Reports', to: '/reports', icon: 'i-lucide-file-bar-chart' },
+  { label: 'Outages', to: '/outages', icon: 'i-lucide-zap-off' },
+  { label: 'Explorer', to: '/explorer', icon: 'i-lucide-search-code' },
+  { label: 'Settings', to: '/settings', icon: 'i-lucide-settings-2' }
 ]
 </script>
 
