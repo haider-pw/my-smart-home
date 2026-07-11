@@ -74,6 +74,7 @@ interface BillRow {
   source: string
   measuredKwh: number | null
   deltaPct: number | null
+  archiveKey: string | null
 }
 
 const { data: billsRes, refresh: refreshBills } = await useFetch<ApiEnvelope<{ bills: BillRow[], anchorDay: number }>>(
@@ -260,8 +261,11 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
               <th class="py-2 pr-3 text-right font-medium">
                 Amount
               </th>
-              <th class="py-2 text-right font-medium">
+              <th class="py-2 pr-3 text-right font-medium">
                 Rs/unit
+              </th>
+              <th class="py-2 text-right font-medium">
+                Bill
               </th>
             </tr>
           </thead>
@@ -298,10 +302,27 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
                 {{ bill.amountPkr !== null ? `Rs ${Math.round(bill.amountPkr).toLocaleString('en-IN')}` : '—' }}
               </td>
               <td
-                class="py-2 text-right num"
+                class="py-2 pr-3 text-right num"
                 :class="(bill.effectiveRatePkr ?? 0) > 50 ? 'text-[#ff6376]' : (bill.effectiveRatePkr ?? 0) > 40 ? 'text-[#ffbc57]' : 'text-muted'"
               >
                 {{ bill.effectiveRatePkr ?? '—' }}
+              </td>
+              <td class="py-2 text-right">
+                <UButton
+                  v-if="bill.archiveKey"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-eye"
+                  :to="`/api/bills/${bill.billMonth}`"
+                  target="_blank"
+                  external
+                  aria-label="View original bill"
+                />
+                <span
+                  v-else
+                  class="text-dimmed text-xs"
+                >—</span>
               </td>
             </tr>
           </tbody>
