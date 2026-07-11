@@ -47,6 +47,20 @@ async function sendTestPush() {
 interface AlertRow { id: number, type: string, ts: number, payload: { title?: string, body?: string } | null }
 const { data: alertsRes } = await useFetch<ApiEnvelope<{ alerts: AlertRow[] }>>('/api/reports/alerts', { lazy: true })
 
+interface BackupStatus { lastAt: number | null, lastRows: number | null, lastBytes: number | null, count: number }
+const { data: backupRes } = await useFetch<ApiEnvelope<BackupStatus>>('/api/reports/backup-status', { lazy: true })
+const backup = computed(() => backupRes.value?.data ?? null)
+function ago(ts: number): string {
+  const mins = Math.round((Date.now() - ts) / 60000)
+  if (mins < 60) {
+    return `${mins} min ago`
+  }
+  if (mins < 1440) {
+    return `${Math.round(mins / 60)} h ago`
+  }
+  return `${Math.round(mins / 1440)} d ago`
+}
+
 // Editable copy (deep) — saved back as a whole
 const form = ref<TariffConfig | null>(null)
 watchEffect(() => {
@@ -362,6 +376,50 @@ async function save() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Backups -->
+      <div class="panel p-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold">
+              Database backups
+            </h2>
+            <p class="microlabel text-dimmed mt-0.5">
+              nightly gzipped snapshot to R2 · 14 daily + 12 monthly retained
+            </p>
+          </div>
+          <UBadge
+            v-if="backup?.lastAt"
+            color="success"
+            variant="subtle"
+          >
+            <UIcon
+              name="i-lucide-shield-check"
+              class="size-3 mr-1"
+            />
+            {{ ago(backup.lastAt) }}
+          </UBadge>
+          <UBadge
+            v-else
+            color="warning"
+            variant="subtle"
+          >
+            no backup yet
+          </UBadge>
+        </div>
+        <p
+          v-if="backup?.lastAt"
+          class="text-xs text-muted mt-3 num"
+        >
+          Last: {{ backup.lastRows?.toLocaleString() }} rows · {{ Math.round((backup.lastBytes ?? 0) / 1024) }} KB · {{ backup.count }} snapshot{{ backup.count === 1 ? '' : 's' }} stored
+        </p>
+        <p
+          v-else
+          class="text-xs text-muted mt-3"
+        >
+          Runs automatically once the nightly job is scheduled. Your history is the only irreplaceable data — Tuya keeps just 7 days.
+        </p>
       </div>
     </template>
   </UContainer>
