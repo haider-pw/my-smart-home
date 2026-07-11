@@ -1,10 +1,16 @@
+import { requireSharedSecret } from '../../utils/admin-guard'
+import { sanitizeDevice } from '../../utils/sanitize'
 import { currentTuyaRegion, listTuyaDevices } from '../../utils/tuya'
 
 /**
  * GET /api/explorer/devices — all devices on the linked Smart Life account,
  * including their live status DPs (the list endpoint embeds them).
+ *
+ * Responses are sanitized (no local_key / coordinates / ip / uid) and the
+ * endpoint is secret-guarded outside local dev — this app deploys publicly.
  */
 export default defineEventHandler(async (event) => {
+  requireSharedSecret(event)
   try {
     const devices = await listTuyaDevices()
     return {
@@ -12,7 +18,7 @@ export default defineEventHandler(async (event) => {
       data: {
         region: currentTuyaRegion(),
         count: devices.length,
-        devices
+        devices: devices.map(sanitizeDevice)
       },
       error: null
     }

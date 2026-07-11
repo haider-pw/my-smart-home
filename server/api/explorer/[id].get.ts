@@ -1,11 +1,16 @@
+import { requireSharedSecret } from '../../utils/admin-guard'
+import { sanitizeDevice } from '../../utils/sanitize'
 import { getTuyaDevice, getTuyaDeviceSpecification, getTuyaDeviceStatus } from '../../utils/tuya'
 
 /**
  * GET /api/explorer/:id — full detail for one device:
  * metadata, current status DPs, and the capability specification
  * (which DPs exist, their types and ranges — including rated current where exposed).
+ *
+ * Sanitized + secret-guarded outside local dev — this app deploys publicly.
  */
 export default defineEventHandler(async (event) => {
+  requireSharedSecret(event)
   const deviceId = getRouterParam(event, 'id')
   if (!deviceId) {
     setResponseStatus(event, 400)
@@ -20,7 +25,7 @@ export default defineEventHandler(async (event) => {
     ])
     return {
       success: true as const,
-      data: { device, status, specification },
+      data: { device: sanitizeDevice(device), status, specification },
       error: null
     }
   } catch (error: unknown) {

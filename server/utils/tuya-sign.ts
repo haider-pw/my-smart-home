@@ -61,7 +61,9 @@ export function buildPathWithQuery(path: string, query?: TuyaQuery): string {
   const pairs = Object.entries(query)
     .filter((entry): entry is [string, TuyaQueryValue] => entry[1] !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    // Tuya signs the RAW comma in list values (e.g. type=1,2) — over-encoding
+    // it makes the server compute a different signature ("1004: sign invalid").
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%2C/gi, ',')}`)
   return pairs.length > 0 ? `${path}?${pairs.join('&')}` : path
 }
 
