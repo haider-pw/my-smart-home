@@ -35,9 +35,10 @@ const router = useRouter()
 
 // URL-persisted filters (shareable)
 const days = ref(Number(route.query.days) || 30)
-const device = ref<string>(typeof route.query.device === 'string' ? route.query.device : '')
+const ALL_DEVICES = 'all'
+const device = ref<string>(typeof route.query.device === 'string' && route.query.device.length > 0 ? route.query.device : ALL_DEVICES)
 watch([days, device], () => {
-  router.replace({ query: { days: days.value, ...(device.value ? { device: device.value } : {}) } })
+  router.replace({ query: { days: days.value, ...(device.value !== ALL_DEVICES ? { device: device.value } : {}) } })
 })
 
 const { data: devicesRes } = await useFetch<ApiEnvelope<{ devices: DeviceRow[] }>>('/api/reports/summary', {
@@ -48,14 +49,15 @@ const { data: devicesRes } = await useFetch<ApiEnvelope<{ devices: DeviceRow[] }
 })
 
 const deviceOptions = computed(() => [
-  { label: 'Whole house (breaker)', value: '' },
+  // Reka UI forbids empty-string SelectItem values — use a sentinel
+  { label: 'Whole house (breaker)', value: ALL_DEVICES },
   ...(devicesRes.value?.data?.devices ?? [])
     .filter(d => d.role === 'plug')
     .map(d => ({ label: d.name, value: d.id }))
 ])
 
 const { data: trendRes, pending: trendPending } = await useFetch<ApiEnvelope<TrendData>>('/api/reports/trend', {
-  query: computed(() => ({ bucket: 'day', days: days.value, ...(device.value ? { device: device.value } : {}) })),
+  query: computed(() => ({ bucket: 'day', days: days.value, ...(device.value !== ALL_DEVICES ? { device: device.value } : {}) })),
   lazy: true,
   watch: [days, device],
   retry: 2,
@@ -355,7 +357,7 @@ const fmt1 = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-IN')
     <div class="panel p-5">
       <div class="flex items-center justify-between mb-2">
         <h2 class="text-sm font-semibold">
-          Daily consumption — {{ device ? deviceOptions.find(o => o.value === device)?.label : 'whole house' }}
+          Daily consumption — {{ deviceOptions.find(o => o.value === device)?.label ?? 'whole house' }}
         </h2>
         <span
           v-if="trendPending"
