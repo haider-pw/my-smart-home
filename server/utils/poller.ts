@@ -1,13 +1,14 @@
 /**
  * The 5-minute poll cycle: device discovery, readings, energy accounting,
- * connectivity transitions, and outage open/close with power-vs-internet
- * classification. Every write is idempotent (UNIQUE constraints + upserts),
- * so re-runs, retries, and overlapping backfills are all safe.
+ * connectivity tracking, and a trailing outage sweep. Every write is
+ * idempotent (UNIQUE constraints + upserts), so re-runs, retries, and
+ * overlapping backfills are all safe.
  */
 import { desc, eq, sql } from 'drizzle-orm'
 import * as schema from '../db/schema'
 import { useDb, type Db } from './db'
-import { apportionAcrossHours, classifyOutage, OUTAGE_MIN_DURATION_MS, registerDelta } from './energy-math'
+import { apportionAcrossHours, registerDelta } from './energy-math'
+import { syncBreakerOutages } from './outage-sync'
 import { pktHourStart } from '../../shared/utils/pkt-time'
 import { listTuyaDevices, type TuyaDevice } from './tuya'
 import { addEleToKwh, parseBreakerStatus, parsePlugStatus, roleForCategory } from './tuya-decode'
@@ -15,9 +16,10 @@ import { fetchReportLogs } from './tuya-logs'
 
 const ADD_ELE_LOOKBACK_MS = 60 * 60 * 1000 // first-run window; backfill covers older
 const ADD_ELE_CURSOR_PREFIX = 'add_ele_cursor:'
-const OUTAGE_OPEN_KEY = 'outage_open'
 const LAST_POLL_KEY = 'last_poll'
 const TUYA_AUTH_ERROR_KEY = 'tuya_auth_error'
+/** Trailing window each poll re-checks for missed offline/online events. */
+const OUTAGE_SWEEP_WINDOW_MS = 12 * 60 * 60 * 1000
 
 export interface PollSummary {
   polledAt: number
@@ -26,6 +28,7 @@ export interface PollSummary {
   readings: number
   energyEvents: number
   registerKwh: number | null
+  outagesSynced: number
   transitions: string[]
   errors: string[]
 }
@@ -94,65 +97,21 @@ async function upsertDevices(db: Db, tuyaDevices: TuyaDevice[], now: number): Pr
   }
 }
 
-/** Detects online/offline transitions and manages outage windows for the breaker. */
-async function handleConnectivity(
+/**
+ * Tracks last-known connectivity for status display. Outage detection does
+ * NOT live here — it's reconstructed from Tuya's own connectivity logs by
+ * syncBreakerOutages (exact timestamps, immune to missed polls).
+ */
+async function updateConnectivity(
   db: Db,
   deviceRow: typeof schema.devices.$inferSelect,
   isOnline: boolean,
-  isBreaker: boolean,
-  currentRegisterKwh: number | null,
   now: number,
   summary: PollSummary
 ): Promise<void> {
-  const previous = deviceRow.lastOnline
-
-  if (previous !== null && previous !== isOnline) {
-    await db.insert(schema.deviceEvents)
-      .values({ deviceId: deviceRow.id, eventType: isOnline ? 'online' : 'offline', eventTime: now })
-      .onConflictDoNothing()
-    summary.transitions.push(`${deviceRow.name}: ${previous ? 'online' : 'offline'} → ${isOnline ? 'online' : 'offline'}`)
+  if (deviceRow.lastOnline !== null && deviceRow.lastOnline !== isOnline) {
+    summary.transitions.push(`${deviceRow.name}: → ${isOnline ? 'online' : 'offline'}`)
   }
-
-  if (isBreaker) {
-    const openRaw = await getSyncValue(db, OUTAGE_OPEN_KEY)
-
-    if (!isOnline && previous === true && !openRaw) {
-      // Breaker just vanished — open a pending outage with the last register value
-      const lastSnapshot = await db.select()
-        .from(schema.registerSnapshots)
-        .where(eq(schema.registerSnapshots.deviceId, deviceRow.id))
-        .orderBy(desc(schema.registerSnapshots.ts))
-        .limit(1)
-        .get()
-      await setSyncValue(db, OUTAGE_OPEN_KEY, JSON.stringify({
-        startTs: now,
-        registerKwh: lastSnapshot?.registerKwh ?? null
-      }))
-    }
-
-    if (isOnline && openRaw) {
-      const open = JSON.parse(openRaw) as { startTs: number, registerKwh: number | null }
-      const durationMs = now - open.startTs
-      await deleteSyncValue(db, OUTAGE_OPEN_KEY)
-
-      if (durationMs >= OUTAGE_MIN_DURATION_MS) {
-        const delta = open.registerKwh !== null && currentRegisterKwh !== null
-          ? registerDelta(open.registerKwh, currentRegisterKwh)
-          : null
-        await db.insert(schema.outages)
-          .values({
-            startTs: open.startTs,
-            endTs: now,
-            durationMin: Math.round(durationMs / 6000) / 10,
-            kind: classifyOutage(delta),
-            registerDeltaKwh: delta
-          })
-          .onConflictDoNothing()
-        summary.transitions.push(`outage closed: ${classifyOutage(delta)} (${Math.round(durationMs / 60000)} min)`)
-      }
-    }
-  }
-
   await db.update(schema.devices)
     .set({ lastOnline: isOnline, lastSeenAt: now })
     .where(eq(schema.devices.id, deviceRow.id))
@@ -265,6 +224,7 @@ export async function pollDevices(): Promise<PollSummary> {
     readings: 0,
     energyEvents: 0,
     registerKwh: null,
+    outagesSynced: 0,
     transitions: [],
     errors: []
   }
@@ -295,13 +255,19 @@ export async function pollDevices(): Promise<PollSummary> {
     summary.activeDevices++
 
     try {
-      let currentRegister: number | null = null
       if (row.role === 'breaker' && device.online) {
-        currentRegister = await pollBreaker(db, device, now, summary)
+        await pollBreaker(db, device, now, summary)
       } else if (row.role === 'plug' && device.online) {
         await pollPlug(db, device, now, summary)
       }
-      await handleConnectivity(db, row, device.online, row.role === 'breaker', currentRegister, now, summary)
+      await updateConnectivity(db, row, device.online, now, summary)
+
+      if (row.role === 'breaker') {
+        // Outage sweep: reconstruct any offline windows Tuya recorded in the
+        // trailing 12h — self-healing even when the cron itself was down.
+        const sweep = await syncBreakerOutages(db, device.id, now - OUTAGE_SWEEP_WINDOW_MS, now)
+        summary.outagesSynced += sweep.outages
+      }
     } catch (error: unknown) {
       summary.errors.push(`${device.name}: ${error instanceof Error ? error.message : 'poll failed'}`)
     }
