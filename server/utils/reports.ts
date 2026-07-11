@@ -76,6 +76,38 @@ export async function hourlySeries(db: Db, from: number, to: number, deviceId?: 
   return rows.map(r => ({ hourStart: r.hourStart, kwh: r.kwh ?? 0 }))
 }
 
+export interface DailyDeviceRow {
+  /** PKT day 'YYYY-MM-DD' */
+  day: string
+  deviceId: string
+  kwh: number
+}
+
+/** Daily totals per device (PKT days) in one pass — feeds the cost page. */
+export async function dailyByDevice(db: Db, from: number, to: number): Promise<DailyDeviceRow[]> {
+  const rows = await db.select({
+    hourStart: schema.energyHourly.hourStart,
+    deviceId: schema.energyHourly.deviceId,
+    kwh: schema.energyHourly.kwh
+  })
+    .from(schema.energyHourly)
+    .where(and(gte(schema.energyHourly.hourStart, from), lt(schema.energyHourly.hourStart, to)))
+    .all()
+
+  const byKey = new Map<string, DailyDeviceRow>()
+  for (const row of rows) {
+    const day = pktDayKey(row.hourStart)
+    const key = `${day}|${row.deviceId}`
+    const entry = byKey.get(key)
+    if (entry) {
+      entry.kwh += row.kwh
+    } else {
+      byKey.set(key, { day, deviceId: row.deviceId, kwh: row.kwh })
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.day.localeCompare(b.day))
+}
+
 export interface HeatmapCell {
   day: string
   hour: number

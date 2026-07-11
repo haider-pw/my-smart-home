@@ -81,7 +81,7 @@ const kpis = computed(() => {
   const overPace = avgPerDay > s.cost.greenPaceKwhPerDay
   return [
     { label: `Units — ${cycleLabel.value}`, value: fmt(s.units.cycle), unit: 'kWh', sub: `day ${s.cycle.daysElapsed} of ${s.cycle.daysTotal}`, tone: 'cyan' as const },
-    { label: 'Cost so far', value: `Rs ${fmt(s.cost.cycleSoFarPkr)}`, sub: s.tariff.config.effectiveRatePkr ? `@ Rs ${s.tariff.config.effectiveRatePkr}/unit (your bill)` : 'slab-model estimate', tone: 'default' as const },
+    { label: 'Cost so far', value: `Rs ${fmt(s.cost.cycleSoFarPkr)}`, sub: s.tariff.config.effectiveRatePkr ? `@ Rs ${s.tariff.config.effectiveRatePkr}/unit (your bill)` : 'slab-model estimate', tone: 'default' as const, to: '/costs' },
     { label: 'Avg / day', value: fmt1(avgPerDay), unit: 'kWh', sub: `${overPace ? '▲ over' : '▼ under'} pace of ${fmt1(s.cost.greenPaceKwhPerDay)}`, tone: overPace ? 'amber' as const : 'green' as const },
     { label: 'Next unit costs', value: `Rs ${s.slab.current.marginalRate}`, sub: Number.isFinite(s.slab.current.unitsToNext) ? `${fmt(s.slab.current.unitsToNext)} units to next slab` : 'top slab — max rate', tone: 'amber' as const }
   ]
@@ -295,7 +295,14 @@ const freshness = computed(() => {
             <h2 class="text-sm font-semibold">
               Where the money goes
             </h2>
-            <span class="microlabel text-dimmed">this cycle</span>
+            <UButton
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              trailing-icon="i-lucide-chevron-right"
+              label="details"
+              to="/costs"
+            />
           </div>
           <DashboardCostDonut
             :slices="donutSlices"

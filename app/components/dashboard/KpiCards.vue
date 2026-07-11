@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { NuxtLink } from '#components'
+
 defineProps<{
   kpis: Array<{
     label: string
@@ -6,6 +8,8 @@ defineProps<{
     unit?: string
     sub?: string
     tone?: 'default' | 'green' | 'amber' | 'red' | 'cyan'
+    /** When set, the card becomes a link (drill-down affordance) */
+    to?: string
   }>
 }>()
 
@@ -20,13 +24,21 @@ const toneClass: Record<string, string> = {
 
 <template>
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-    <div
+    <component
+      :is="kpi.to ? NuxtLink : 'div'"
       v-for="kpi in kpis"
       :key="kpi.label"
-      class="panel p-4"
+      :to="kpi.to"
+      class="panel p-4 block"
+      :class="kpi.to ? 'transition hover:ring-2 hover:ring-primary/40 cursor-pointer' : ''"
     >
-      <p class="microlabel text-dimmed">
+      <p class="microlabel text-dimmed flex items-center justify-between">
         {{ kpi.label }}
+        <UIcon
+          v-if="kpi.to"
+          name="i-lucide-chevron-right"
+          class="size-3 text-dimmed"
+        />
       </p>
       <p
         class="num text-xl sm:text-2xl font-bold mt-2 leading-none"
@@ -44,6 +56,6 @@ const toneClass: Record<string, string> = {
       >
         {{ kpi.sub }}
       </p>
-    </div>
+    </component>
   </div>
 </template>
