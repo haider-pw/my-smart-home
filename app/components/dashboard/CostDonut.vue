@@ -15,7 +15,7 @@ const option = computed(() => ({
   },
   series: [{
     type: 'pie',
-    radius: ['58%', '85%'],
+    radius: ['64%', '88%'],
     itemStyle: { borderColor: '#0b1017', borderWidth: 3 },
     label: { show: false },
     data: props.slices.map(s => ({
@@ -33,24 +33,26 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
   <div>
     <div class="relative">
       <ClientOnly>
+        <!-- vue-echarts sets inline height:100% — explicit style wins over classes -->
         <VChart
           :option="option"
           :autoresize="true"
-          class="h-48 w-full"
+          class="w-full"
+          :style="{ height: '192px', width: '100%' }"
         />
         <template #fallback>
-          <div class="h-48" />
+          <div style="height: 192px" />
         </template>
       </ClientOnly>
       <div class="absolute inset-0 grid place-items-center pointer-events-none text-center">
-        <div>
-          <p class="microlabel text-dimmed">
-            Cycle so far
+        <div class="max-w-24">
+          <p class="microlabel text-dimmed !text-[9px]">
+            so far
           </p>
-          <p class="num text-xl font-bold mt-0.5">
+          <p class="num text-lg font-bold mt-0.5">
             {{ fmt(totalPkr) }}
           </p>
-          <p class="text-xs text-muted">
+          <p class="text-[10px] text-muted">
             PKR
           </p>
         </div>

@@ -28,6 +28,7 @@ useSeoMeta({
 
 const links = [
   { label: 'Dashboard', to: '/', icon: 'i-lucide-layout-dashboard' },
+  { label: 'Live', to: '/live', icon: 'i-lucide-activity' },
   { label: 'Explorer', to: '/explorer', icon: 'i-lucide-search-code' }
 ]
 </script>

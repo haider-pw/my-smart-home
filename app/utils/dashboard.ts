@@ -63,6 +63,10 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
  * Deliberately conservative: only claims backed by the numbers on screen.
  */
 export function buildRecommendations(s: SummaryData): Recommendation[] {
+  // Data-starved cycles produce absurd percentages and noise — say nothing yet
+  if (s.units.cycle < 5) {
+    return []
+  }
   const recs: Recommendation[] = []
   const effRate = s.tariff.config.effectiveRatePkr ?? s.cost.cycleSoFarPkr / Math.max(s.units.cycle, 1)
   const isTou = s.tariff.config.meterType === 'tou'
@@ -71,7 +75,7 @@ export function buildRecommendations(s: SummaryData): Recommendation[] {
   const plugs = s.devices.filter(d => d.role === 'plug' && d.cycleKwh > 0.5)
   const top = [...plugs].sort((a, b) => b.cycleKwh - a.cycleKwh)[0]
   if (top) {
-    const sharePct = Math.round((top.cycleKwh / Math.max(s.units.cycle, 0.001)) * 100)
+    const sharePct = Math.min(Math.round((top.cycleKwh / Math.max(s.units.cycle, top.cycleKwh)) * 100), 100)
     recs.push({
       rank: recs.length + 1,
       head: `${top.name} is your biggest metered consumer (${sharePct}% of the house)`,

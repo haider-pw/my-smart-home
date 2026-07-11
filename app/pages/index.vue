@@ -129,6 +129,21 @@ const isTouMeter = computed(() => summary.value?.tariff.config.meterType === 'to
       /> Loading your data…
     </div>
 
+    <div
+      v-else-if="!summary"
+      class="text-center py-24 space-y-3"
+    >
+      <p class="text-muted text-sm">
+        Couldn't load the dashboard data.
+      </p>
+      <UButton
+        icon="i-lucide-refresh-cw"
+        variant="soft"
+        label="Retry"
+        @click="() => refreshSummary()"
+      />
+    </div>
+
     <template v-else-if="summary">
       <!-- Hero: gauge + recommendations -->
       <div class="grid lg:grid-cols-2 gap-4 sm:gap-5">
@@ -238,10 +253,16 @@ const isTouMeter = computed(() => summary.value?.tariff.config.meterType === 'to
           <span class="microlabel text-dimmed">brighter = more kWh</span>
         </div>
         <DashboardPeakHeatmap
-          v-if="heatmapRes?.data"
+          v-if="heatmapRes?.data && heatmapRes.data.cells.length >= 3"
           :cells="heatmapRes.data.cells"
           :peak-hours="summary.tariff.config.tou.peakHours"
         />
+        <p
+          v-else
+          class="text-sm text-muted text-center py-10"
+        >
+          The heatmap fills in as hourly data accumulates — check back in a few hours.
+        </p>
       </div>
 
       <!-- Device table -->
