@@ -1,7 +1,11 @@
 <script setup lang="ts">
 useHead({
   meta: [
-    { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+    // viewport-fit=cover is required for env(safe-area-inset-*) on notched phones
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+    { name: 'apple-mobile-web-app-capable', content: 'yes' },
+    { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+    { name: 'theme-color', content: '#070a10' }
   ],
   link: [
     { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
@@ -40,7 +44,7 @@ const links = [
 
 <template>
   <UApp>
-    <UHeader>
+    <UHeader :toggle="false">
       <template #left>
         <NuxtLink
           to="/"
@@ -53,17 +57,27 @@ const links = [
             />
           </span>
           <span class="leading-tight">
-            <span class="block font-bold">Electricity Analytics</span>
+            <span class="block font-bold text-sm sm:text-base">Electricity Analytics</span>
             <span class="microlabel text-dimmed !text-[9px] hidden sm:block">IESCO · Islamabad · load monitor</span>
           </span>
         </NuxtLink>
       </template>
 
-      <UNavigationMenu :items="links" />
+      <!-- Full nav on desktop; phones use the bottom tab bar instead -->
+      <template #right>
+        <UNavigationMenu
+          :items="links"
+          class="hidden lg:flex"
+        />
+      </template>
     </UHeader>
 
-    <UMain>
+    <!-- Extra bottom padding on mobile so content clears the tab bar -->
+    <UMain class="pb-24 lg:pb-0">
       <NuxtPage />
     </UMain>
+
+    <AppBottomNav />
+    <PwaInstallPrompt />
   </UApp>
 </template>
