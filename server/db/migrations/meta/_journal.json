@@ -15,6 +15,13 @@
       "when": 1783775536726,
       "tag": "0001_bills",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783781656181,
+      "tag": "0002_bill_archive",
+      "breakpoints": true
     }
   ]
 }
