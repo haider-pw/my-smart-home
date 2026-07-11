@@ -1,4 +1,4 @@
-import { requireSharedSecret } from '../../utils/admin-guard'
+import { requireAuthOrSecret } from '../../utils/auth-guard'
 import { sanitizeDevice } from '../../utils/sanitize'
 import { currentTuyaRegion, listTuyaDevices } from '../../utils/tuya'
 
@@ -10,7 +10,7 @@ import { currentTuyaRegion, listTuyaDevices } from '../../utils/tuya'
  * endpoint is secret-guarded outside local dev — this app deploys publicly.
  */
 export default defineEventHandler(async (event) => {
-  requireSharedSecret(event)
+  await requireAuthOrSecret(event)
   try {
     const devices = await listTuyaDevices()
     return {
