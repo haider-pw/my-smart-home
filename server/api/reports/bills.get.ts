@@ -33,10 +33,16 @@ export default defineEventHandler(async () => {
     const endTs = Date.UTC(y!, m! - 1, anchor) - PKT_OFFSET_MS
     const startTs = Date.UTC(y!, m! - 2, anchor) - PKT_OFFSET_MS
 
+    // Partial coverage counts too: measure whatever slice of the window our
+    // history covers and report the coverage share — the July bill (history
+    // began mid-window) shows a qualified number instead of nothing.
     let measuredKwh: number | null = null
-    if (breaker && startTs >= dataStart) {
-      const energy = await energyByDevice(db, startTs, endTs)
+    let coveragePct: number | null = null
+    const effectiveStart = Math.max(startTs, dataStart)
+    if (breaker && effectiveStart < endTs) {
+      const energy = await energyByDevice(db, effectiveStart, endTs)
       measuredKwh = energy.find(e => e.deviceId === breaker.id)?.kwh ?? 0
+      coveragePct = Math.round(((endTs - effectiveStart) / (endTs - startTs)) * 100)
     }
 
     return {
@@ -44,7 +50,9 @@ export default defineEventHandler(async () => {
       windowStartTs: startTs,
       windowEndTs: endTs,
       measuredKwh,
-      deltaPct: measuredKwh !== null && bill.units && bill.units > 0
+      coveragePct,
+      // Delta is only meaningful against a (nearly) fully measured window
+      deltaPct: measuredKwh !== null && (coveragePct ?? 0) >= 95 && bill.units && bill.units > 0
         ? Math.round(((measuredKwh - bill.units) / bill.units) * 100)
         : null
     }
