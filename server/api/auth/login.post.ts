@@ -1,6 +1,7 @@
 import { and, eq, gt, lt, sql } from 'drizzle-orm'
 import * as schema from '../../db/schema'
 import { getAppSession } from '../../utils/app-session'
+import { getClientIp } from '../../utils/client-ip'
 import { useDb } from '../../utils/db'
 
 const MAX_FAILED_ATTEMPTS = 5
@@ -36,7 +37,7 @@ export default defineEventHandler(async (event) => {
 
   const db = useDb()
   const now = Date.now()
-  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const ip = getClientIp(event) ?? 'unknown'
 
   // Opportunistic cleanup keeps the table tiny
   await db.delete(schema.authAttempts).where(lt(schema.authAttempts.ts, now - ATTEMPT_RETENTION_MS))

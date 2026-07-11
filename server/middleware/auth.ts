@@ -1,4 +1,5 @@
 import { isSessionAuthed } from '../utils/app-session'
+import { getClientIp } from '../utils/client-ip'
 import { isIpAllowed } from '../utils/ip-match'
 
 /**
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
     return // auth not configured — open (dev default)
   }
 
-  const visitorIp = getRequestIP(event, { xForwardedFor: true })
+  const visitorIp = getClientIp(event)
   if (isIpAllowed(visitorIp, auth.allowedIps)) {
     return
   }

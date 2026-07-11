@@ -1,4 +1,5 @@
 import { isSessionAuthed } from '../../utils/app-session'
+import { getClientIp } from '../../utils/client-ip'
 import { isIpAllowed } from '../../utils/ip-match'
 
 /**
@@ -8,7 +9,7 @@ import { isIpAllowed } from '../../utils/ip-match'
  */
 export default defineEventHandler(async (event) => {
   const { auth } = useRuntimeConfig()
-  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const ip = getClientIp(event) ?? 'unknown'
   const configured = Boolean(auth.appPin && auth.sessionSecret)
 
   return {

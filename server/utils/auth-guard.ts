@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import { isSessionAuthed } from './app-session'
+import { getClientIp } from './client-ip'
 import { isIpAllowed } from './ip-match'
 
 /**
@@ -14,7 +15,7 @@ export async function requireAuthOrSecret(event: H3Event): Promise<void> {
     if (await isSessionAuthed(event)) {
       return
     }
-    const visitorIp = getRequestIP(event, { xForwardedFor: true })
+    const visitorIp = getClientIp(event)
     if (isIpAllowed(visitorIp, auth.allowedIps)) {
       return
     }
