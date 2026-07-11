@@ -1,4 +1,4 @@
-import { requireSharedSecret } from '../../utils/admin-guard'
+import { requireAuthOrSecret } from '../../utils/auth-guard'
 import { tuyaGet } from '../../utils/tuya'
 import type { TuyaQuery } from '../../utils/tuya-sign'
 
@@ -11,7 +11,7 @@ const ALLOWED_PATH_PREFIXES = ['/v1.0/', '/v1.1/', '/v1.2/', '/v2.0/', '/v2.1/']
  * Dev/diagnostic tool; sits behind the app-wide auth from Phase 2 onward.
  */
 export default defineEventHandler(async (event) => {
-  requireSharedSecret(event)
+  await requireAuthOrSecret(event)
   const { path, ...rest } = getQuery(event) as Record<string, string>
 
   if (!path || !ALLOWED_PATH_PREFIXES.some(p => path.startsWith(p))) {
