@@ -4,7 +4,7 @@ import {
   classifyOutage,
   registerDelta
 } from '../../server/utils/energy-math'
-import { pktHourStart } from '../../server/utils/pkt-time'
+import { pktHourStart } from '../../shared/utils/pkt-time'
 
 describe('registerDelta', () => {
   it('returns the plain difference for a normally advancing register', () => {
