@@ -2,7 +2,7 @@ import { requireSharedSecret } from '../utils/admin-guard'
 import * as schema from '../db/schema'
 import { useDb } from '../utils/db'
 import { addToHourly } from '../utils/poller'
-import { pktHourStart } from '../utils/pkt-time'
+import { pktHourStart } from '../../shared/utils/pkt-time'
 
 interface IngestBody {
   energyEvents?: Array<{ deviceId: string, eventTime: number, kwh: number }>
