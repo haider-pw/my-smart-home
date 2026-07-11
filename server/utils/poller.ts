@@ -8,6 +8,7 @@ import { desc, eq, sql } from 'drizzle-orm'
 import * as schema from '../db/schema'
 import { useDb, type Db } from './db'
 import { apportionAcrossHours, registerDelta } from './energy-math'
+import { evaluateAlerts } from './alerts'
 import { syncBreakerOutages } from './outage-sync'
 import { pktHourStart } from '../../shared/utils/pkt-time'
 import { listTuyaDevices, type TuyaDevice } from './tuya'
@@ -29,6 +30,7 @@ export interface PollSummary {
   energyEvents: number
   registerKwh: number | null
   outagesSynced: number
+  alertsFired: number
   transitions: string[]
   errors: string[]
 }
@@ -225,6 +227,7 @@ export async function pollDevices(): Promise<PollSummary> {
     energyEvents: 0,
     registerKwh: null,
     outagesSynced: 0,
+    alertsFired: 0,
     transitions: [],
     errors: []
   }
@@ -267,6 +270,11 @@ export async function pollDevices(): Promise<PollSummary> {
         // trailing 12h — self-healing even when the cron itself was down.
         const sweep = await syncBreakerOutages(db, device.id, now - OUTAGE_SWEEP_WINDOW_MS, now)
         summary.outagesSynced += sweep.outages
+        try {
+          summary.alertsFired += await evaluateAlerts(db, device.id, sweep)
+        } catch (error: unknown) {
+          summary.errors.push('alerts: ' + (error instanceof Error ? error.message : 'evaluation failed'))
+        }
       }
     } catch (error: unknown) {
       summary.errors.push(`${device.name}: ${error instanceof Error ? error.message : 'poll failed'}`)

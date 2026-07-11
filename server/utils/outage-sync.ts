@@ -16,6 +16,7 @@ import { fetchConnectivityEvents, fetchReportLogs } from './tuya-logs'
 export interface OutageSyncResult {
   connectivityEvents: number
   outages: number
+  insertedOutages: Array<{ startTs: number, durationMin: number, kind: 'power' | 'internet' | 'unknown' }>
 }
 
 function registerAround(series: Array<{ ts: number, kwh: number }>, ts: number, side: 'before' | 'after'): number | null {
@@ -40,7 +41,7 @@ export async function syncBreakerOutages(
   from: number,
   to: number
 ): Promise<OutageSyncResult> {
-  const result: OutageSyncResult = { connectivityEvents: 0, outages: 0 }
+  const result: OutageSyncResult = { connectivityEvents: 0, outages: 0, insertedOutages: [] }
 
   const events = await fetchConnectivityEvents(breakerId, from, to)
   if (events.length === 0) {
@@ -92,6 +93,13 @@ export async function syncBreakerOutages(
       .onConflictDoNothing()
       .returning({ id: schema.outages.id })
     result.outages += inserted.length
+    if (inserted.length > 0) {
+      result.insertedOutages.push({
+        startTs: ev.eventTime,
+        durationMin: Math.round(durationMs / 6000) / 10,
+        kind: classifyOutage(delta)
+      })
+    }
   }
 
   return result

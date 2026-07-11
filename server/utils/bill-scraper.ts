@@ -18,6 +18,23 @@ function hiddenField(html: string, name: string): string {
 }
 
 export async function fetchBillHtml(referenceNo: string): Promise<string> {
+  // Direct GET endpoint (owner-discovered) — far simpler than the WebForms
+  // dance; fall back to the token flow if it ever stops serving the bill.
+  try {
+    const direct = await fetch(`${PITC_URL}/general?refno=${referenceNo}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(45_000)
+    })
+    if (direct.ok) {
+      const html = await direct.text()
+      if (html.includes('BILL HISTORY')) {
+        return html
+      }
+    }
+  } catch {
+    // fall through to the WebForms flow
+  }
+
   const getRes = await fetch(PITC_URL, { headers: { 'User-Agent': USER_AGENT } })
   if (!getRes.ok) {
     throw createError({ statusCode: 502, message: `PITC search page: HTTP ${getRes.status}` })
@@ -161,7 +178,13 @@ export async function syncBillsFromHtml(db: Db, html: string): Promise<BillSyncS
   if (isR2Configured()) {
     try {
       const key = `bills/${parsed.billMonth}.html`
-      await r2Put(key, html, 'text/html; charset=utf-8')
+      // Inject <base> so relative assets (QR/barcode scripts, logos) resolve
+      // back to PITC when the archive is viewed — the QR is JS-rendered and
+      // comes out crisp, unlike print-to-PDF rasterization.
+      const archived = html.includes('<base ')
+        ? html
+        : html.replace(/<head([^>]*)>/i, '<head$1><base href="https://bill.pitc.com.pk/">')
+      await r2Put(key, archived, 'text/html; charset=utf-8')
       await db.update(schema.bills)
         .set({ archiveKey: key, archiveContentType: 'text/html; charset=utf-8' })
         .where(eq(schema.bills.billMonth, parsed.billMonth))

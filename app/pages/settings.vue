@@ -17,6 +17,36 @@ const { data: res, refresh } = await useFetch<ApiEnvelope<{ config: TariffConfig
   { retry: 2, retryDelay: 1500 }
 )
 
+// ── Push notifications ───────────────────────────────────────────────────
+const push = usePush()
+onMounted(() => push.refresh())
+
+async function togglePush() {
+  if (push.subscribed.value) {
+    await push.unsubscribe()
+    toast.add({ title: 'Push disabled on this device', color: 'neutral' })
+  } else {
+    const ok = await push.subscribe()
+    toast.add(ok
+      ? { title: 'Push enabled', description: 'Slab, outage, and spike alerts will arrive on this device.', color: 'success' }
+      : { title: 'Permission denied', description: 'Allow notifications in the browser settings.', color: 'warning' })
+  }
+}
+
+const testingPush = ref(false)
+async function sendTestPush() {
+  testingPush.value = true
+  try {
+    const r = await $fetch<ApiEnvelope<{ sent: number }>>('/api/push/test', { method: 'POST' })
+    toast.add({ title: `Test sent to ${r.data?.sent ?? 0} device(s)`, color: 'success' })
+  } finally {
+    testingPush.value = false
+  }
+}
+
+interface AlertRow { id: number, type: string, ts: number, payload: { title?: string, body?: string } | null }
+const { data: alertsRes } = await useFetch<ApiEnvelope<{ alerts: AlertRow[] }>>('/api/reports/alerts', { lazy: true })
+
 // Editable copy (deep) — saved back as a whole
 const form = ref<TariffConfig | null>(null)
 watchEffect(() => {
@@ -277,6 +307,61 @@ async function save() {
           size="lg"
           @click="save"
         />
+      </div>
+
+      <!-- Notifications -->
+      <div class="panel p-5 space-y-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold">
+              Push notifications
+            </h2>
+            <p class="microlabel text-dimmed mt-0.5">
+              slab warnings · outage/restore · usage spikes · projection over budget
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <UButton
+              v-if="push.supported.value"
+              :label="push.subscribed.value ? 'Disable on this device' : 'Enable on this device'"
+              :color="push.subscribed.value ? 'neutral' : 'primary'"
+              :variant="push.subscribed.value ? 'soft' : 'solid'"
+              :loading="push.busy.value"
+              icon="i-lucide-bell"
+              @click="togglePush"
+            />
+            <UButton
+              v-if="push.subscribed.value"
+              label="Send test"
+              variant="ghost"
+              color="neutral"
+              :loading="testingPush"
+              @click="sendTestPush"
+            />
+          </div>
+        </div>
+        <p
+          v-if="!push.supported.value"
+          class="text-xs text-muted"
+        >
+          Push requires the installed PWA or a modern browser, plus VAPID keys configured on the server.
+        </p>
+        <div v-if="(alertsRes?.data?.alerts.length ?? 0) > 0">
+          <p class="microlabel text-dimmed mb-2">
+            Recent alerts
+          </p>
+          <div class="flex flex-col gap-1.5">
+            <div
+              v-for="alert in alertsRes?.data?.alerts ?? []"
+              :key="alert.id"
+              class="flex items-baseline gap-3 text-xs rounded-lg bg-elevated/40 border border-default/50 px-3 py-2"
+            >
+              <span class="num text-dimmed whitespace-nowrap">{{ new Date(alert.ts + 5 * 3600 * 1000).toISOString().slice(5, 16).replace('T', ' ') }}</span>
+              <span class="font-medium">{{ alert.payload?.title ?? alert.type }}</span>
+              <span class="text-muted truncate">{{ alert.payload?.body }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </template>
   </UContainer>
