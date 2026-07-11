@@ -184,5 +184,8 @@ export const bills = sqliteTable('bills', {
   effectiveRatePkr: real('effective_rate_pkr'),
   /** 'current' | 'history' — how this row was obtained */
   source: text('source').notNull().default('history'),
+  /** R2 object key of the archived original document (bills/YYYY-MM.html) */
+  archiveKey: text('archive_key'),
+  archiveContentType: text('archive_content_type'),
   fetchedAt: integer('fetched_at').notNull()
 })

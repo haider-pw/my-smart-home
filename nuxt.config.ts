@@ -39,6 +39,13 @@ export default defineNuxtConfig({
     bill: {
       // 14-digit IESCO reference number for the PITC web-bill scraper
       referenceNo: ''
+    },
+    r2: {
+      // R2 bucket for bill archives (S3 API credentials)
+      accountId: '',
+      accessKeyId: '',
+      secretAccessKey: '',
+      bucket: ''
     }
   },
 

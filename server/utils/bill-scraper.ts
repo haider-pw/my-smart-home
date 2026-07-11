@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm'
 import * as schema from '../db/schema'
 import type { Db } from './db'
 import { parseIescoBill, type ParsedBill } from './bill-parser'
+import { isR2Configured, r2Put } from './r2'
 
 const PITC_URL = 'https://bill.pitc.com.pk/iescobill'
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
@@ -60,18 +61,28 @@ export interface BillSyncSummary {
   inserted: number
   updated: number
   effectiveRateApplied: number | null
+  archived: boolean
 }
 
-/** Fetch, parse, and upsert the current bill + its 12-month history. */
+/** Fetch (from this server) then ingest. Fails where PITC geo-blocks the host. */
 export async function syncBills(db: Db, referenceNo: string): Promise<BillSyncSummary> {
   const html = await fetchBillHtml(referenceNo)
+  return syncBillsFromHtml(db, html)
+}
+
+/**
+ * Parse + upsert from already-fetched bill HTML — the path used by the
+ * homelab relay (PITC is unreachable from foreign datacenter IPs, so the
+ * homelab fetches on its Pakistani connection and POSTs the HTML here).
+ */
+export async function syncBillsFromHtml(db: Db, html: string): Promise<BillSyncSummary> {
   const parsed: ParsedBill | null = parseIescoBill(html)
   if (!parsed) {
     throw createError({ statusCode: 502, message: 'PITC page did not contain a recognizable bill (invalid reference no?)' })
   }
 
   const now = Date.now()
-  const summary: BillSyncSummary = { billMonth: parsed.billMonth, inserted: 0, updated: 0, effectiveRateApplied: null }
+  const summary: BillSyncSummary = { billMonth: parsed.billMonth, inserted: 0, updated: 0, effectiveRateApplied: null, archived: false }
 
   // History rows first (units + amount only) — never overwrite a full record
   for (const row of parsed.history) {
@@ -141,6 +152,22 @@ export async function syncBills(db: Db, referenceNo: string): Promise<BillSyncSu
           })
         summary.effectiveRateApplied = effectiveRate
       }
+    }
+  }
+
+  // Archive the original document to R2 (bills/YYYY-MM.html) — the source
+  // of the Past-bills view action. Non-fatal: parsing/storage never depends
+  // on the archive succeeding.
+  if (isR2Configured()) {
+    try {
+      const key = `bills/${parsed.billMonth}.html`
+      await r2Put(key, html, 'text/html; charset=utf-8')
+      await db.update(schema.bills)
+        .set({ archiveKey: key, archiveContentType: 'text/html; charset=utf-8' })
+        .where(eq(schema.bills.billMonth, parsed.billMonth))
+      summary.archived = true
+    } catch {
+      // logged implicitly via summary.archived=false; poller/scheduler retries daily
     }
   }
 
