@@ -39,26 +39,22 @@ const links = [
       <template #left>
         <NuxtLink
           to="/"
-          class="flex items-center gap-2 font-bold"
+          class="flex items-center gap-2.5"
         >
-          <UIcon
-            name="i-lucide-zap"
-            class="size-5 text-primary"
-          />
-          <span>Electricity Analytics</span>
+          <span class="grid size-9 place-items-center rounded-xl bg-primary/10 ring-1 ring-primary/30 shadow-[0_0_20px_rgba(74,212,255,.15)]">
+            <UIcon
+              name="i-lucide-zap"
+              class="size-4 text-primary"
+            />
+          </span>
+          <span class="leading-tight">
+            <span class="block font-bold">Electricity Analytics</span>
+            <span class="microlabel text-dimmed !text-[9px] hidden sm:block">IESCO · Islamabad · load monitor</span>
+          </span>
         </NuxtLink>
       </template>
 
       <UNavigationMenu :items="links" />
-
-      <template #right>
-        <UBadge
-          variant="subtle"
-          size="sm"
-        >
-          Phase 0
-        </UBadge>
-      </template>
     </UHeader>
 
     <UMain>
