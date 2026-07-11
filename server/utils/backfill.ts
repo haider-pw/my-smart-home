@@ -2,7 +2,7 @@
  * Best-effort historical backfill from Tuya's ~7-day log retention:
  *  - plugs:   add_ele report-logs → exact energy events
  *  - breaker: total_forward_energy report-logs → register series → hourly deltas
- *  - breaker: online/offline logs → reconstructed, classified outages
+ *  - breaker: outage reconstruction via the shared sweep (outage-sync.ts)
  *
  * Every write is idempotent; hours already produced by the live poller are
  * left untouched (live data wins over backfill).
@@ -10,10 +10,11 @@
 import { eq } from 'drizzle-orm'
 import * as schema from '../db/schema'
 import { useDb, type Db } from './db'
-import { apportionAcrossHours, classifyOutage, OUTAGE_MIN_DURATION_MS, registerDelta } from './energy-math'
+import { apportionAcrossHours, registerDelta } from './energy-math'
+import { syncBreakerOutages } from './outage-sync'
 import { pktHourStart } from '../../shared/utils/pkt-time'
 import { addEleToKwh } from './tuya-decode'
-import { fetchConnectivityEvents, fetchReportLogs } from './tuya-logs'
+import { fetchReportLogs } from './tuya-logs'
 
 export interface BackfillSummary {
   ranAt: number
@@ -49,7 +50,7 @@ async function backfillPlug(db: Db, deviceId: string, from: number, to: number, 
   }
 }
 
-async function backfillBreakerEnergy(db: Db, deviceId: string, from: number, to: number, summary: BackfillSummary): Promise<Map<number, number>> {
+async function backfillBreakerEnergy(db: Db, deviceId: string, from: number, to: number, summary: BackfillSummary): Promise<void> {
   const logs = await fetchReportLogs(deviceId, 'total_forward_energy', from, to)
   const series = logs
     .map(l => ({ ts: l.event_time, kwh: Number(l.value) / 100 }))
@@ -83,72 +84,6 @@ async function backfillBreakerEnergy(db: Db, deviceId: string, from: number, to:
       .onConflictDoNothing()
     summary.breakerHours++
   }
-
-  // Register series doubles as outage-classification evidence
-  const registerByTs = new Map(series.map(p => [p.ts, p.kwh]))
-  return registerByTs
-}
-
-function registerAround(series: Map<number, number>, ts: number, side: 'before' | 'after'): number | null {
-  let best: { ts: number, kwh: number } | null = null
-  for (const [t, kwh] of series) {
-    if (side === 'before' ? t <= ts : t >= ts) {
-      if (!best || (side === 'before' ? t > best.ts : t < best.ts)) {
-        best = { ts: t, kwh }
-      }
-    }
-  }
-  return best?.kwh ?? null
-}
-
-async function backfillOutages(
-  db: Db,
-  breakerId: string,
-  registerSeries: Map<number, number>,
-  from: number,
-  to: number,
-  summary: BackfillSummary
-): Promise<void> {
-  const events = await fetchConnectivityEvents(breakerId, from, to)
-
-  for (const ev of events) {
-    await db.insert(schema.deviceEvents)
-      .values({ deviceId: breakerId, eventType: ev.eventType, eventTime: ev.eventTime })
-      .onConflictDoNothing()
-  }
-
-  // Pair offline → next online
-  for (let i = 0; i < events.length; i++) {
-    const ev = events[i]!
-    if (ev.eventType !== 'offline') {
-      continue
-    }
-    const restore = events.slice(i + 1).find(e => e.eventType === 'online')
-    if (!restore) {
-      continue
-    }
-    const durationMs = restore.eventTime - ev.eventTime
-    if (durationMs < OUTAGE_MIN_DURATION_MS) {
-      continue
-    }
-    const before = registerAround(registerSeries, ev.eventTime, 'before')
-    const after = registerAround(registerSeries, restore.eventTime, 'after')
-    const delta = before !== null && after !== null ? registerDelta(before, after) : null
-
-    const inserted = await db.insert(schema.outages)
-      .values({
-        startTs: ev.eventTime,
-        endTs: restore.eventTime,
-        durationMin: Math.round(durationMs / 6000) / 10,
-        kind: classifyOutage(delta),
-        registerDeltaKwh: delta
-      })
-      .onConflictDoNothing()
-      .returning({ id: schema.outages.id })
-    if (inserted.length > 0) {
-      summary.outages++
-    }
-  }
 }
 
 /** Pulls everything Tuya still remembers (~7 days) into our own history. */
@@ -165,8 +100,9 @@ export async function runBackfill(days = 7): Promise<BackfillSummary> {
       if (device.role === 'plug') {
         await backfillPlug(db, device.id, from, to, summary)
       } else if (device.role === 'breaker') {
-        const series = await backfillBreakerEnergy(db, device.id, from, to, summary)
-        await backfillOutages(db, device.id, series, from, to, summary)
+        await backfillBreakerEnergy(db, device.id, from, to, summary)
+        const sweep = await syncBreakerOutages(db, device.id, from, to)
+        summary.outages += sweep.outages
       }
     } catch (error: unknown) {
       summary.errors.push(`${device.name}: ${error instanceof Error ? error.message : 'backfill failed'}`)
