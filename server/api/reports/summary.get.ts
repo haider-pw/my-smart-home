@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, asc, eq, gte } from 'drizzle-orm'
 import { pktDayStart } from '../../../shared/utils/pkt-time'
 import { estimateCostPkr, projectBill, slabEnergyCost } from '../../../shared/utils/tariff'
 import * as schema from '../../db/schema'
@@ -41,7 +41,33 @@ export default defineEventHandler(async () => {
     ? cycleByDevice.get(breaker.id) ?? 0
     : cycleEnergy.reduce((a, e) => a + e.kwh, 0)
 
-  const realProjection = projectBill(cycleUnits, now, config)
+  // Projection must extrapolate only over DATA-COVERED time: when history
+  // starts mid-cycle (e.g. the app was installed after the reading date),
+  // extrapolating over the full elapsed cycle would badly understate the bill.
+  const firstDataRow = breaker
+    ? await db.select({ hourStart: schema.energyHourly.hourStart })
+        .from(schema.energyHourly)
+        .where(and(eq(schema.energyHourly.deviceId, breaker.id), gte(schema.energyHourly.hourStart, cycle.startTs)))
+        .orderBy(asc(schema.energyHourly.hourStart))
+        .limit(1)
+        .get()
+    : null
+  const dataStartTs = Math.max(cycle.startTs, firstDataRow?.hourStart ?? cycle.startTs)
+  const coveredMs = Math.max(now - dataStartTs, 1)
+  const cycleMs = cycle.endTs - cycle.startTs
+  const projectedUnits = cycleUnits * (cycleMs / coveredMs)
+  const projectedTotalPkr = estimateCostPkr(projectedUnits, config)
+  const paceHelper = projectBill(cycleUnits, now, config) // budget helpers only
+  const realProjection = {
+    ...paceHelper,
+    projectedUnits,
+    projectedTotalPkr,
+    budgetStatus: (projectedTotalPkr <= config.budget.green
+      ? 'green'
+      : projectedTotalPkr <= config.budget.red ? 'amber' : 'red') as 'green' | 'amber' | 'red'
+  }
+  const dataCoverageDays = Math.round(coveredMs / (24 * 60 * 60 * 1000) * 10) / 10
+
   const slabs = config.slabs[config.category]
   const position = slabEnergyCost(realProjection.projectedUnits, slabs, config.previousSlabBenefitDepth[config.category])
   const currentPosition = slabEnergyCost(cycleUnits, slabs, config.previousSlabBenefitDepth[config.category])
@@ -70,7 +96,7 @@ export default defineEventHandler(async () => {
     data: {
       generatedAt: now,
       tariff: { config, isDefault },
-      cycle: realProjection.cycle,
+      cycle: { ...realProjection.cycle, dataCoverageDays },
       units: {
         cycle: cycleUnits,
         today: breaker ? todayByDevice.get(breaker.id) ?? 0 : 0,

@@ -25,7 +25,7 @@ export interface SummaryData {
     }
     isDefault: boolean
   }
-  cycle: { startTs: number, endTs: number, daysElapsed: number, daysTotal: number }
+  cycle: { startTs: number, endTs: number, daysElapsed: number, daysTotal: number, dataCoverageDays: number }
   units: { cycle: number, today: number, yesterday: number, baseline: number }
   cost: {
     cycleSoFarPkr: number
