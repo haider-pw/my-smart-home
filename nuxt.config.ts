@@ -35,6 +35,10 @@ export default defineNuxtConfig({
     ingest: {
       // Shared secret for /api/ingest (homelab relay) and admin endpoints
       secret: ''
+    },
+    bill: {
+      // 14-digit IESCO reference number for the PITC web-bill scraper
+      referenceNo: ''
     }
   },
 
