@@ -40,8 +40,11 @@ interface ApiEnvelope<T> {
 
 useSeoMeta({ title: 'Live Monitor — Electricity Analytics' })
 
-const REFRESH_MS = 10_000
-const HISTORY_LENGTH = 90 // 90 × 10s = 15 min of sparkline
+// 5s polling while visible — half the lag of the previous 10s. The floor is
+// the device's own cloud-report cadence; true push arrives with the Phase 8
+// homelab Pulsar relay (SSE to the browser, Smart-Life-grade latency).
+const REFRESH_MS = 5_000
+const HISTORY_LENGTH = 180 // 180 × 5s = 15 min of sparkline
 
 const live = ref<LiveData | null>(null)
 const errorMsg = ref('')
@@ -150,7 +153,7 @@ const heroStats = computed(() => {
         Live Monitor
       </h1>
       <span class="microlabel text-dimmed">
-        refreshes every 10s while visible · {{ lastUpdated ? `updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'connecting…' }}
+        refreshes every 5s while visible · {{ lastUpdated ? `updated ${new Date(lastUpdated).toLocaleTimeString()}` : 'connecting…' }}
       </span>
     </div>
 
@@ -179,7 +182,7 @@ const heroStats = computed(() => {
           <h2 class="text-sm font-semibold">
             Main breaker — whole house
           </h2>
-          <span class="microlabel text-dimmed">rolling 15 min · 10s samples</span>
+          <span class="microlabel text-dimmed">rolling 15 min · 5s samples</span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div
