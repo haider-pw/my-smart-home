@@ -24,15 +24,15 @@ const timeframeDays = computed(() => Number(timeframe.value.replace('d', '')))
 
 const { data: summaryRes, pending: summaryPending, refresh: refreshSummary } = await useFetch<ApiEnvelope<SummaryData>>(
   '/api/reports/summary',
-  { lazy: true }
+  { lazy: true, retry: 2, retryDelay: 1500 }
 )
 const { data: trendRes } = await useFetch<ApiEnvelope<TrendData>>(
   '/api/reports/trend',
-  { query: computed(() => ({ bucket: 'day', days: timeframeDays.value })), lazy: true, watch: [timeframeDays] }
+  { query: computed(() => ({ bucket: 'day', days: timeframeDays.value })), lazy: true, watch: [timeframeDays], retry: 2, retryDelay: 1500 }
 )
 const { data: heatmapRes } = await useFetch<ApiEnvelope<HeatmapData>>(
   '/api/reports/heatmap',
-  { query: { days: 7 }, lazy: true }
+  { query: { days: 7 }, lazy: true, retry: 2, retryDelay: 1500 }
 )
 
 const summary = computed(() => summaryRes.value?.data ?? null)
