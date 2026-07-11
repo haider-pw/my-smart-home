@@ -36,6 +36,8 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",
     "vue-tsc": "^3.3.5",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
     "wrangler": "^4.110.0"
   },
   "packageManager": "pnpm@11.9.0"

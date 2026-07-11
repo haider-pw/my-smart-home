@@ -3,7 +3,8 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
-    '@nuxthub/core'
+    '@nuxthub/core',
+    '@vite-pwa/nuxt'
   ],
 
   devtools: {
@@ -46,6 +47,14 @@ export default defineNuxtConfig({
       accessKeyId: '',
       secretAccessKey: '',
       bucket: ''
+    },
+    vapid: {
+      // Web Push signing (generate with `npx web-push generate-vapid-keys`)
+      privateKey: '',
+      subject: ''
+    },
+    public: {
+      vapidPublicKey: ''
     }
   },
 
@@ -86,5 +95,31 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
+  },
+
+  pwa: {
+    strategies: 'injectManifest',
+    srcDir: 'sw',
+    filename: 'sw.ts',
+    registerType: 'autoUpdate',
+    injectRegister: 'auto',
+    manifest: {
+      name: 'Watt — Electricity Analytics',
+      short_name: 'Watt',
+      description: 'Personal smart-home electricity analytics',
+      start_url: '/',
+      display: 'standalone',
+      background_color: '#070a10',
+      theme_color: '#070a10',
+      icons: [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+      ]
+    },
+    injectManifest: {
+      globPatterns: ['**/*.{js,css,png,svg,ico}']
+    },
+    devOptions: { enabled: false }
   }
 })
