@@ -17,10 +17,12 @@ export const devices = sqliteTable('devices', {
   name: text('name').notNull(),
   category: text('category').notNull(),
   productName: text('product_name'),
-  /** 'breaker' | 'plug' | 'other' — derived from Tuya category */
+  /** 'breaker' | 'plug' | 'switch' | 'other' — derived from Tuya category */
   role: text('role').notNull().default('other'),
   /** Only active devices are polled and reported on */
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+  /** Nameplate power for non-metering switches — drives runtime→kWh estimation */
+  ratedWatts: integer('rated_watts'),
   /** Last known online state — used for transition detection */
   lastOnline: integer('last_online', { mode: 'boolean' }),
   lastSeenAt: integer('last_seen_at'),

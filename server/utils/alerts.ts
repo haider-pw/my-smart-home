@@ -14,7 +14,7 @@ import { getTariffConfig } from './tariff-settings'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
 
-async function alertOnce(db: Db, dedupKey: string, type: string, title: string, body: string, url = '/'): Promise<boolean> {
+export async function alertOnce(db: Db, dedupKey: string, type: string, title: string, body: string, url = '/'): Promise<boolean> {
   const key = `alert:${dedupKey}`
   const existing = await db.select().from(schema.syncState).where(eq(schema.syncState.key, key)).get()
   if (existing) {

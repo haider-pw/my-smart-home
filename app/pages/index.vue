@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { MotorData } from '~/components/dashboard/MotorCard.vue'
 import { MONTH_LABELS, buildRecommendations, type SummaryData } from '~/utils/dashboard'
 
 interface ApiEnvelope<T> {
@@ -32,6 +33,11 @@ const { data: trendRes } = await useFetch<ApiEnvelope<TrendData>>(
 )
 const { data: heatmapRes } = await useFetch<ApiEnvelope<HeatmapData>>(
   '/api/reports/heatmap',
+  { query: { days: 7 }, lazy: true, retry: 2, retryDelay: 1500 }
+)
+// null data = no switch-role device on the account; the card simply hides
+const { data: motorRes, refresh: refreshMotor } = await useFetch<ApiEnvelope<MotorData>>(
+  '/api/reports/motor',
   { query: { days: 7 }, lazy: true, retry: 2, retryDelay: 1500 }
 )
 
@@ -103,6 +109,7 @@ function refreshAll() {
     return
   }
   refreshSummary()
+  refreshMotor()
 }
 
 function onVisibility() {
@@ -248,6 +255,12 @@ const freshness = computed(() => {
 
       <!-- KPI row -->
       <DashboardKpiCards :kpis="kpis" />
+
+      <!-- Water motor (hidden until a switch-role device exists) -->
+      <DashboardMotorCard
+        v-if="motorRes?.data"
+        :motor="motorRes.data"
+      />
 
       <!-- Slab ladder -->
       <div class="panel p-5">

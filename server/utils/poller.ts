@@ -11,12 +11,18 @@ import { apportionAcrossHours, registerDelta } from './energy-math'
 import { evaluateAlerts } from './alerts'
 import { syncBreakerOutages } from './outage-sync'
 import { pktHourStart } from '../../shared/utils/pkt-time'
+import { evaluateMotorAlerts } from './motor-alerts'
+import { evaluateSignatureStep } from './motor-detect'
+import { DEFAULT_MOTOR_WATTS } from './motor-sessions'
 import { listTuyaDevices, type TuyaDevice } from './tuya'
-import { addEleToKwh, parseBreakerStatus, parsePlugStatus, roleForCategory } from './tuya-decode'
+import { addEleToKwh, parseBreakerStatus, parsePlugStatus, roleForCategory, switchLogToState } from './tuya-decode'
 import { fetchReportLogs } from './tuya-logs'
 
 const ADD_ELE_LOOKBACK_MS = 60 * 60 * 1000 // first-run window; backfill covers older
 const ADD_ELE_CURSOR_PREFIX = 'add_ele_cursor:'
+/** First-run window for switch on/off logs — Tuya retains 7 days, take it all */
+const SWITCH_LOG_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
+const SWITCH_CURSOR_PREFIX = 'switch_cursor:'
 const LAST_POLL_KEY = 'last_poll'
 const TUYA_AUTH_ERROR_KEY = 'tuya_auth_error'
 /** Trailing window each poll re-checks for missed offline/online events. */
@@ -73,8 +79,19 @@ export async function addToHourly(
 }
 
 async function upsertDevices(db: Db, tuyaDevices: TuyaDevice[], now: number): Promise<void> {
+  // The first dlq device on the account is the house meter; any breaker
+  // paired later (e.g. the water-motor sub-meter) must never be mistaken
+  // for it — house totals, outage sweeps, and alerts all key off the main.
+  const mainBreaker = await db.select({ id: schema.devices.id })
+    .from(schema.devices)
+    .where(eq(schema.devices.role, 'breaker'))
+    .get()
+
   for (const d of tuyaDevices) {
-    const role = roleForCategory(d.category)
+    let role: ReturnType<typeof roleForCategory> | 'submeter' = roleForCategory(d.category)
+    if (role === 'breaker' && mainBreaker && mainBreaker.id !== d.id) {
+      role = 'submeter'
+    }
     await db.insert(schema.devices)
       .values({
         id: d.id,
@@ -82,8 +99,9 @@ async function upsertDevices(db: Db, tuyaDevices: TuyaDevice[], now: number): Pr
         category: d.category,
         productName: d.product_name ?? null,
         role,
-        // Monitor breakers and plugs by default; everything else opt-in
-        isActive: role !== 'other',
+        // Monitor breakers and plugs by default; sub-meters activate when
+        // their circuit support ships; everything else opt-in
+        isActive: role !== 'other' && role !== 'submeter',
         lastSeenAt: now,
         createdAt: now
       })
@@ -92,6 +110,7 @@ async function upsertDevices(db: Db, tuyaDevices: TuyaDevice[], now: number): Pr
         set: {
           name: d.name,
           productName: d.product_name ?? null,
+          role, // category mapping can gain roles (e.g. tdq → switch)
           lastSeenAt: now
           // isActive intentionally NOT updated — user's choice survives polls
         }
@@ -215,6 +234,42 @@ async function pollPlug(
   await setSyncValue(db, cursorKey, String(maxEventTime + 1))
 }
 
+/**
+ * Non-metering switch (water motor): ingest exact on/off transitions from
+ * Tuya's report logs into device_events. Runtime sessions and estimated
+ * energy are derived at read time (motor-sessions.ts).
+ */
+async function pollSwitch(
+  db: Db,
+  device: TuyaDevice,
+  now: number,
+  summary: PollSummary
+): Promise<void> {
+  const cursorKey = SWITCH_CURSOR_PREFIX + device.id
+  const cursorRaw = await getSyncValue(db, cursorKey)
+  const from = cursorRaw ? Number(cursorRaw) : now - SWITCH_LOG_LOOKBACK_MS
+
+  const logs = await fetchReportLogs(device.id, 'switch_1', from, now)
+  let maxEventTime = from
+
+  for (const log of logs) {
+    maxEventTime = Math.max(maxEventTime, log.event_time)
+    const state = switchLogToState(log.value)
+    if (state === null) {
+      continue
+    }
+    const inserted = await db.insert(schema.deviceEvents)
+      .values({ deviceId: device.id, eventType: state, eventTime: log.event_time })
+      .onConflictDoNothing()
+      .returning({ id: schema.deviceEvents.id })
+    if (inserted.length > 0) {
+      summary.energyEvents++
+    }
+  }
+
+  await setSyncValue(db, cursorKey, String(maxEventTime + 1))
+}
+
 /** One full poll cycle. Called by the cron task and the admin trigger. */
 export async function pollDevices(): Promise<PollSummary> {
   const db = useDb()
@@ -262,6 +317,9 @@ export async function pollDevices(): Promise<PollSummary> {
         await pollBreaker(db, device, now, summary)
       } else if (row.role === 'plug' && device.online) {
         await pollPlug(db, device, now, summary)
+      } else if (row.role === 'switch' && device.online) {
+        await pollSwitch(db, device, now, summary)
+        summary.alertsFired += await evaluateMotorAlerts(db, device, now)
       }
       await updateConnectivity(db, row, device.online, now, summary)
 
@@ -279,6 +337,34 @@ export async function pollDevices(): Promise<PollSummary> {
     } catch (error: unknown) {
       summary.errors.push(`${device.name}: ${error instanceof Error ? error.message : 'poll failed'}`)
     }
+  }
+
+  // Signature fallback for the water motor: while its relay produces no real
+  // on/off events, watch the house baseline (breaker − plugs) for
+  // motor-sized power steps and record synthetic sig-on/sig-off events.
+  try {
+    const motorRow = activeRows.find(r => r.role === 'switch')
+    const breakerDevice = tuyaDevices.find(d => rowById.get(d.id)?.role === 'breaker' && d.online)
+    if (motorRow && breakerDevice) {
+      const breakerW = parseBreakerStatus(breakerDevice.status ?? []).powerW
+      if (breakerW !== null) {
+        let plugsW = 0
+        for (const d of tuyaDevices) {
+          if (rowById.get(d.id)?.role === 'plug' && d.online) {
+            plugsW += parsePlugStatus(d.status ?? []).powerW ?? 0
+          }
+        }
+        await evaluateSignatureStep(
+          db,
+          motorRow.id,
+          motorRow.ratedWatts ?? DEFAULT_MOTOR_WATTS,
+          Math.max(breakerW - plugsW, 0),
+          now
+        )
+      }
+    }
+  } catch (error: unknown) {
+    summary.errors.push('signature: ' + (error instanceof Error ? error.message : 'evaluation failed'))
   }
 
   await setSyncValue(db, LAST_POLL_KEY, String(now))

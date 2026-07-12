@@ -10,7 +10,8 @@ interface ApiEnvelope<T> {
 interface CostDevice {
   id: string
   name: string
-  role: 'plug' | 'baseline'
+  role: 'plug' | 'baseline' | 'motor'
+  estimated: boolean
   kwh: number
   costPkr: number
   todayKwh: number
@@ -51,12 +52,16 @@ const { data: res, pending } = await useFetch<ApiEnvelope<CostData>>('/api/repor
 })
 const data = computed(() => res.value?.data ?? null)
 
+const MOTOR_COLOR = '#4ad4ff'
+
 const colorById = computed(() => {
   const map: Record<string, string> = { baseline: BASELINE_COLOR }
   let i = 0
   for (const device of data.value?.devices ?? []) {
     if (device.role === 'plug') {
       map[device.id] = deviceColor(i++)
+    } else if (device.role === 'motor') {
+      map[device.id] = MOTOR_COLOR
     }
   }
   return map
@@ -71,7 +76,11 @@ const stackOption = computed(() => {
   if (!d) {
     return {}
   }
-  const seriesIds = [...d.devices.filter(x => x.role === 'plug').map(x => x.id), 'baseline']
+  const seriesIds = [
+    ...d.devices.filter(x => x.role === 'plug').map(x => x.id),
+    ...d.devices.filter(x => x.role === 'motor').map(x => x.id),
+    'baseline'
+  ]
   const nameById: Record<string, string> = { baseline: 'Baseline' }
   for (const device of d.devices) {
     nameById[device.id] = device.name
@@ -126,12 +135,11 @@ const stackOption = computed(() => {
       type: 'bar',
       stack: 'cost',
       barMaxWidth: 26,
+      // series-level color keeps the legend chips in sync with the bars
+      color: colorById.value[id],
       data: d.days.map(x => ({
         value: Math.round(x.perDevicePkr[id] ?? 0),
-        itemStyle: {
-          color: colorById.value[id],
-          opacity: x.partial ? 0.45 : 0.88
-        }
+        itemStyle: { opacity: x.partial ? 0.45 : 0.88 }
       }))
     }))
   }
@@ -272,10 +280,16 @@ const cumulativeOption = computed(() => {
             <p class="text-sm font-medium truncate flex-1">
               {{ device.name }}
             </p>
+            <UTooltip
+              v-if="device.estimated"
+              text="Estimated from runtime x rated watts (no metering chip) - carved out of Baseline"
+            >
+              <span class="microlabel text-[#ffbc57]">~est</span>
+            </UTooltip>
             <span class="num text-xs text-muted">{{ device.sharePct }}%</span>
           </div>
           <p class="num text-2xl font-bold mt-3 leading-none">
-            Rs {{ fmt(device.costPkr) }}
+            {{ device.estimated ? '~' : '' }}Rs {{ fmt(device.costPkr) }}
           </p>
           <p class="num text-xs text-muted mt-1.5">
             {{ fmt1(device.kwh) }} kWh · today Rs {{ fmt(device.todayCostPkr) }} · avg {{ fmt1(device.avgPerDayKwh) }} kWh/d
@@ -354,7 +368,8 @@ const cumulativeOption = computed(() => {
         Per-device cost = measured kWh × your blended effective rate. Under slab pricing the
         “expensive slab” isn’t attributable to a single device, so flat-rate attribution is used —
         consistent across the app. Rare clock-skew days are reconciled so each day’s stack sums to the
-        breaker’s authoritative total.
+        breaker’s authoritative total. Devices marked ~est carry no metering chip — their kWh is
+        estimated from runtime × rated watts and carved out of Baseline.
       </p>
     </template>
   </UContainer>

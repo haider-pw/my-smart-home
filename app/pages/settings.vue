@@ -69,6 +69,40 @@ watchEffect(() => {
   }
 })
 
+// ── Water motor rated power ──────────────────────────────────────────────
+interface MotorSettings { device: { id: string, name: string }, ratedWatts: number, isDefaultRating: boolean }
+const { data: motorRes, refresh: refreshMotor } = await useFetch<ApiEnvelope<MotorSettings>>(
+  '/api/reports/motor',
+  { query: { days: 1 }, lazy: true }
+)
+const motorWatts = ref<number | null>(null)
+watchEffect(() => {
+  if (motorRes.value?.data && motorWatts.value === null) {
+    motorWatts.value = motorRes.value.data.ratedWatts
+  }
+})
+const savingMotor = ref(false)
+async function saveMotorRating() {
+  const device = motorRes.value?.data?.device
+  if (!device || !motorWatts.value || savingMotor.value) {
+    return
+  }
+  savingMotor.value = true
+  try {
+    await $fetch('/api/settings/motor', {
+      method: 'PUT',
+      body: { deviceId: device.id, ratedWatts: motorWatts.value }
+    })
+    toast.add({ title: 'Motor rating saved', description: `Estimates now use ${motorWatts.value} W.`, icon: 'i-lucide-check', color: 'success' })
+    await refreshMotor()
+  } catch (error: unknown) {
+    const err = error as { data?: { error?: string } }
+    toast.add({ title: 'Save failed', description: err.data?.error ?? 'Unknown error', color: 'error' })
+  } finally {
+    savingMotor.value = false
+  }
+}
+
 // Bill helper: total ÷ units → effective rate
 const billTotal = ref<number | null>(null)
 const billUnits = ref<number | null>(null)
@@ -242,6 +276,53 @@ async function save() {
               ]"
             />
           </UFormField>
+        </div>
+      </div>
+
+      <!-- Water motor -->
+      <div
+        v-if="motorRes?.data"
+        class="panel p-5 space-y-4"
+      >
+        <div>
+          <h2 class="text-sm font-semibold flex items-center gap-2">
+            <UIcon
+              name="i-lucide-droplets"
+              class="size-4 text-[#4ad4ff]"
+            />
+            {{ motorRes.data.device.name }} — rated power
+          </h2>
+          <p class="microlabel text-dimmed mt-1">
+            From the motor's nameplate. 1 HP = 746 W · ½ HP = 373 W. Drives the runtime → cost estimate.
+          </p>
+        </div>
+        <UAlert
+          v-if="motorRes.data.isDefaultRating"
+          color="info"
+          variant="subtle"
+          icon="i-lucide-info"
+          description="Using the 1 HP default — check the metal nameplate on the motor body and enter the real figure."
+        />
+        <div class="flex items-end gap-3">
+          <UFormField
+            label="Rated power (watts)"
+            class="flex-1 max-w-48"
+          >
+            <UInput
+              v-model.number="motorWatts"
+              type="number"
+              min="50"
+              max="7500"
+              step="10"
+            />
+          </UFormField>
+          <UButton
+            :loading="savingMotor"
+            icon="i-lucide-save"
+            label="Save rating"
+            variant="soft"
+            @click="saveMotorRating"
+          />
         </div>
       </div>
 

@@ -52,6 +52,27 @@ export function reconcileDay(
   return { totalKwh: breakerKwh, perDevice: { ...scaled, baseline: 0 } }
 }
 
+/**
+ * Carve an estimated device (e.g. the water motor: runtime × rated watts)
+ * out of each day's baseline. The estimate can never exceed what the
+ * baseline actually contains, so the stack still sums to the breaker total.
+ */
+export function carveEstimatedDevice(
+  days: DayBreakdown[],
+  estKwhByDay: Map<string, number>,
+  id: string
+): DayBreakdown[] {
+  return days.map((d) => {
+    const est = estKwhByDay.get(d.day) ?? 0
+    const baseline = d.perDevice.baseline ?? 0
+    const carved = Math.min(Math.max(est, 0), baseline)
+    return {
+      ...d,
+      perDevice: { ...d.perDevice, [id]: carved, baseline: baseline - carved }
+    }
+  })
+}
+
 /** Group raw daily-device rows into reconciled per-day breakdowns. */
 export function buildDailyBreakdown(
   rows: DailyDeviceRow[],
