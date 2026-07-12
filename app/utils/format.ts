@@ -53,6 +53,25 @@ export function formatMonthLong(month: string): string {
   return `${MONTHS_LONG[m - 1]} ${match[1]}`
 }
 
+/** 75 → '1h 15m' · 45 → '45m' — runtime durations. */
+export function formatMinutes(minutes: number): string {
+  const whole = Math.round(minutes)
+  if (whole < 60) {
+    return `${whole}m`
+  }
+  const h = Math.floor(whole / 60)
+  const m = whole % 60
+  return m === 0 ? `${h}h` : `${h}h ${String(m).padStart(2, '0')}m`
+}
+
+/** Epoch ms → 'h:mm am/pm' in PKT (fixed UTC+5). */
+export function formatClockPkt(ts: number): string {
+  const d = new Date(ts + 5 * 3600 * 1000)
+  const h24 = d.getUTCHours()
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h12}:${String(d.getUTCMinutes()).padStart(2, '0')} ${h24 < 12 ? 'am' : 'pm'}`
+}
+
 /** Consistent series colors for metered devices across every chart/table. */
 export const DEVICE_SERIES_COLORS = ['#a98bff', '#34e8a4', '#ffbc57', '#4ad4ff'] as const
 export const BASELINE_COLOR = '#6b7a8b'

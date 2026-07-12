@@ -109,12 +109,43 @@ export function addEleToKwh(value: unknown): number | null {
 }
 
 /** Which app role a Tuya category maps to; anything else is not monitored. */
-export function roleForCategory(category: string): 'breaker' | 'plug' | 'other' {
+export function roleForCategory(category: string): 'breaker' | 'plug' | 'switch' | 'other' {
   if (category === 'dlq') {
     return 'breaker'
   }
   if (category === 'cz') {
     return 'plug'
   }
+  if (category === 'tdq') {
+    // Non-metering relay (e.g. the water-motor 30A switch): only on/off
+    // state — energy is estimated from runtime × rated watts.
+    return 'switch'
+  }
   return 'other'
+}
+
+export interface SwitchStatus {
+  switchOn: boolean | null
+  /** Raw fault bitmap DP — 0 means healthy */
+  fault: number | null
+}
+
+export function parseSwitchStatus(status: StatusItem[]): SwitchStatus {
+  const byCode = new Map(status.map(s => [s.code, s.value]))
+  const sw = byCode.get('switch_1')
+  return {
+    switchOn: typeof sw === 'boolean' ? sw : null,
+    fault: num(byCode.get('fault'))
+  }
+}
+
+/** switch_1 report-log value → on/off (Tuya logs booleans as 'true'/'false'). */
+export function switchLogToState(value: unknown): 'on' | 'off' | null {
+  if (value === true || value === 'true') {
+    return 'on'
+  }
+  if (value === false || value === 'false') {
+    return 'off'
+  }
+  return null
 }

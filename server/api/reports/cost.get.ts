@@ -2,8 +2,10 @@ import { eq } from 'drizzle-orm'
 import { pktDayKey, pktDayStart } from '../../../shared/utils/pkt-time'
 import { billingCycleFor, estimateCostPkr } from '../../../shared/utils/tariff'
 import * as schema from '../../db/schema'
-import { buildDailyBreakdown } from '../../utils/cost-breakdown'
+import { buildDailyBreakdown, carveEstimatedDevice } from '../../utils/cost-breakdown'
 import { useDb } from '../../utils/db'
+import { getMotorSessions } from '../../utils/motor-detect'
+import { DEFAULT_MOTOR_WATTS, runtimeByDay } from '../../utils/motor-sessions'
 import { dailyByDevice } from '../../utils/reports'
 import { getTariffConfig } from '../../utils/tariff-settings'
 
@@ -38,7 +40,26 @@ export default defineEventHandler(async (event) => {
 
   const breaker = devices.find(d => d.role === 'breaker') ?? null
   const plugs = devices.filter(d => d.role === 'plug')
-  const breakdown = buildDailyBreakdown(rows, breaker?.id ?? null, plugs.map(p => p.id))
+  let breakdown = buildDailyBreakdown(rows, breaker?.id ?? null, plugs.map(p => p.id))
+
+  // Water motor: no metering chip — carve estimated kWh (runtime x rated
+  // watts from switch on/off events) out of the unmetered baseline.
+  const motor = devices.find(d => d.role === 'switch') ?? null
+  if (motor) {
+    const { sessions } = await getMotorSessions(db, motor.id, from, now)
+    const perDay = runtimeByDay(
+      sessions,
+      motor.ratedWatts ?? DEFAULT_MOTOR_WATTS,
+      now,
+      pktDayKey,
+      pktDayStart
+    )
+    breakdown = carveEstimatedDevice(
+      breakdown,
+      new Map(perDay.map(d => [d.day, d.estKwh])),
+      motor.id
+    )
+  }
 
   const todayKey = pktDayKey(now)
   const completeDays = breakdown.filter(d => d.day !== todayKey)
@@ -57,7 +78,9 @@ export default defineEventHandler(async (event) => {
   interface DeviceSummary {
     id: string
     name: string
-    role: 'plug' | 'baseline'
+    role: 'plug' | 'baseline' | 'motor'
+    /** True when kWh is estimated (runtime x rated watts), not metered */
+    estimated: boolean
     kwh: number
     costPkr: number
     todayKwh: number
@@ -71,7 +94,7 @@ export default defineEventHandler(async (event) => {
   const totalKwh = breakdown.reduce((a, d) => a + d.totalKwh, 0)
   const today = breakdown.find(d => d.day === todayKey)
 
-  function summarize(id: string, name: string, role: 'plug' | 'baseline'): DeviceSummary {
+  function summarize(id: string, name: string, role: 'plug' | 'baseline' | 'motor'): DeviceSummary {
     const kwh = breakdown.reduce((a, d) => a + (d.perDevice[id] ?? 0), 0)
     const todayKwh = today?.perDevice[id] ?? 0
     const completeKwh = completeDays.reduce((a, d) => a + (d.perDevice[id] ?? 0), 0)
@@ -80,6 +103,7 @@ export default defineEventHandler(async (event) => {
       id,
       name,
       role,
+      estimated: role === 'motor',
       kwh,
       costPkr: kwh * rate,
       todayKwh,
@@ -93,6 +117,7 @@ export default defineEventHandler(async (event) => {
 
   const summaries: DeviceSummary[] = [
     ...plugs.map(p => summarize(p.id, p.name, 'plug')),
+    ...(motor ? [summarize(motor.id, motor.name, 'motor')] : []),
     summarize('baseline', 'Baseline (unmetered)', 'baseline')
   ].sort((a, b) => b.kwh - a.kwh)
 

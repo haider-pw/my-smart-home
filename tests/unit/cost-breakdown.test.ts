@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDailyBreakdown, reconcileDay } from '../../server/utils/cost-breakdown'
+import { buildDailyBreakdown, carveEstimatedDevice, reconcileDay } from '../../server/utils/cost-breakdown'
 
 describe('reconcileDay', () => {
   it('normal day: baseline = breaker − plugs', () => {
@@ -54,5 +54,36 @@ describe('buildDailyBreakdown', () => {
     const days = buildDailyBreakdown(rows, 'brk', [])
 
     expect(days[0]!.totalKwh).toBe(10)
+  })
+})
+
+describe('carveEstimatedDevice', () => {
+  const days = [
+    { day: '2026-07-11', totalKwh: 20, perDevice: { p1: 4, baseline: 16 } },
+    { day: '2026-07-12', totalKwh: 10, perDevice: { p1: 2, baseline: 8 } }
+  ]
+
+  it('moves the estimate out of baseline; stack still sums to total', () => {
+    const carved = carveEstimatedDevice(days, new Map([['2026-07-11', 0.5]]), 'motor')
+
+    expect(carved[0]!.perDevice).toEqual({ p1: 4, motor: 0.5, baseline: 15.5 })
+    expect(carved[1]!.perDevice).toEqual({ p1: 2, motor: 0, baseline: 8 })
+    for (const d of carved) {
+      const sum = Object.values(d.perDevice).reduce((a, b) => a + b, 0)
+      expect(sum).toBeCloseTo(d.totalKwh, 10)
+    }
+  })
+
+  it('clamps the estimate to what baseline actually contains', () => {
+    const carved = carveEstimatedDevice(days, new Map([['2026-07-12', 99]]), 'motor')
+
+    expect(carved[1]!.perDevice.motor).toBe(8)
+    expect(carved[1]!.perDevice.baseline).toBe(0)
+  })
+
+  it('does not mutate the input days', () => {
+    carveEstimatedDevice(days, new Map([['2026-07-11', 1]]), 'motor')
+
+    expect(days[0]!.perDevice).toEqual({ p1: 4, baseline: 16 })
   })
 })

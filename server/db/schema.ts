@@ -17,10 +17,12 @@ export const devices = sqliteTable('devices', {
   name: text('name').notNull(),
   category: text('category').notNull(),
   productName: text('product_name'),
-  /** 'breaker' | 'plug' | 'other' — derived from Tuya category */
+  /** 'breaker' | 'plug' | 'switch' | 'other' — derived from Tuya category */
   role: text('role').notNull().default('other'),
   /** Only active devices are polled and reported on */
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+  /** Nameplate power for non-metering switches — drives runtime→kWh estimation */
+  ratedWatts: integer('rated_watts'),
   /** Last known online state — used for transition detection */
   lastOnline: integer('last_online', { mode: 'boolean' }),
   lastSeenAt: integer('last_seen_at'),
@@ -94,11 +96,14 @@ export const energyDaily = sqliteTable('energy_daily', {
   uniqueIndex('energy_daily_device_day_unique').on(table.deviceId, table.day)
 ])
 
-/** State transitions: online/offline (connectivity), on/off (relay). */
+/**
+ * State transitions: online/offline (connectivity), on/off (relay), and
+ * sig-on/sig-off (synthetic motor runs inferred from power signatures).
+ */
 export const deviceEvents = sqliteTable('device_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   deviceId: text('device_id').notNull(),
-  /** 'online' | 'offline' | 'on' | 'off' */
+  /** 'online' | 'offline' | 'on' | 'off' | 'sig-on' | 'sig-off' */
   eventType: text('event_type').notNull(),
   eventTime: integer('event_time').notNull()
 }, table => [

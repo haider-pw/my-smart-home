@@ -48,7 +48,9 @@ export default defineEventHandler(async () => {
   const devices: LiveDevice[] = []
   for (const d of tuyaDevices) {
     const role = roleForCategory(d.category)
-    if (role === 'other') {
+    // 'switch' is deliberately excluded: the motor relay sits always-on ahead
+    // of a manual switchboard, so its on/off state isn't the motor's state.
+    if (role !== 'breaker' && role !== 'plug') {
       continue
     }
     const base = {
