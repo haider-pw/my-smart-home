@@ -96,11 +96,14 @@ export const energyDaily = sqliteTable('energy_daily', {
   uniqueIndex('energy_daily_device_day_unique').on(table.deviceId, table.day)
 ])
 
-/** State transitions: online/offline (connectivity), on/off (relay). */
+/**
+ * State transitions: online/offline (connectivity), on/off (relay), and
+ * sig-on/sig-off (synthetic motor runs inferred from power signatures).
+ */
 export const deviceEvents = sqliteTable('device_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   deviceId: text('device_id').notNull(),
-  /** 'online' | 'offline' | 'on' | 'off' */
+  /** 'online' | 'offline' | 'on' | 'off' | 'sig-on' | 'sig-off' */
   eventType: text('event_type').notNull(),
   eventTime: integer('event_time').notNull()
 }, table => [

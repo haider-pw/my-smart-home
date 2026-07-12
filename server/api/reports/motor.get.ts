@@ -4,7 +4,7 @@ import { estimateCostPkr } from '../../../shared/utils/tariff'
 import * as schema from '../../db/schema'
 import { useDb } from '../../utils/db'
 import { getMotorSessions } from '../../utils/motor-detect'
-import { DEFAULT_MOTOR_WATTS, estimateKwh, runtimeByDay } from '../../utils/motor-sessions'
+import { DEFAULT_MOTOR_WATTS, runtimeByDay } from '../../utils/motor-sessions'
 import { getTariffConfig } from '../../utils/tariff-settings'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -40,18 +40,27 @@ export default defineEventHandler(async (event) => {
   const closed = sessions.filter(s => s.endTs !== null)
   const lastRun = closed[closed.length - 1] ?? null
 
-  const perDay = runtimeByDay(sessions, ratedWatts, now, pktDayKey, pktDayStart)
-    .filter(d => d.day >= pktDayKey(windowStart))
+  const byDay = new Map(
+    runtimeByDay(sessions, ratedWatts, now, pktDayKey, pktDayStart).map(d => [d.day, d])
+  )
+  // Zero-fill so the UI always renders a true N-day axis
+  const perDay = Array.from({ length: days }, (_, i) => {
+    const day = pktDayKey(windowStart + i * DAY_MS)
+    return byDay.get(day) ?? { day, fills: 0, minutes: 0, estKwh: 0 }
+  })
   const todayKey = pktDayKey(now)
   const today = perDay.find(d => d.day === todayKey) ?? { day: todayKey, fills: 0, minutes: 0, estKwh: 0 }
 
-  const windowKwh = estimateKwh(sessions.filter(s => (s.endTs ?? now) >= windowStart), ratedWatts)
+  // Window totals come from the day-clipped buckets — the single source of
+  // truth — so they can never disagree with the bars
+  const windowKwh = perDay.reduce((a, d) => a + d.estKwh, 0)
 
   return {
     success: true as const,
     data: {
       device: { id: motor.id, name: motor.name, online: motor.lastOnline ?? null },
       detection,
+      todayKey,
       ratedWatts,
       isDefaultRating: motor.ratedWatts === null,
       ratePkrPerUnit: Math.round(rate * 100) / 100,

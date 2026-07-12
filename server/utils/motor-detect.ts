@@ -68,6 +68,26 @@ async function insertSigEvent(db: Db, deviceId: string, eventType: 'sig-on' | 's
     .onConflictDoNothing()
 }
 
+/**
+ * Parked relay: the newest real event is an 'on' that has sat for longer
+ * than any plausible run — the relay is being used always-on ahead of a
+ * manual switchboard, so its events are stale history, not the motor.
+ * Without this check, old setup toggles would starve the signature
+ * fallback for as long as they stay inside the query window.
+ */
+export function isRelayParked(
+  events: Array<{ eventType: string, eventTime: number }>,
+  now: number
+): boolean {
+  let newest: { eventType: string, eventTime: number } | null = null
+  for (const e of events) {
+    if (newest === null || e.eventTime > newest.eventTime) {
+      newest = e
+    }
+  }
+  return newest?.eventType === 'on' && now - newest.eventTime > MAX_SESSION_MS
+}
+
 export interface MotorDetectionResult {
   sessions: MotorSession[]
   /** 'events' = real switch transitions · 'signature' = approximate power-step inference */
@@ -97,7 +117,7 @@ export async function getMotorSessions(
 
   const real = await fetchEvents(['on', 'off'])
   const realSessions = buildSessions(real, now)
-  if (realSessions.some(s => s.endTs !== null || !s.capped)) {
+  if (!isRelayParked(real, now) && realSessions.some(s => s.endTs !== null || !s.capped)) {
     return { sessions: realSessions, detection: 'events' }
   }
 

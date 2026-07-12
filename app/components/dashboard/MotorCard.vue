@@ -4,6 +4,7 @@ import { formatClockPkt, formatDayShort, formatMinutes } from '~/utils/format'
 export interface MotorData {
   device: { id: string, name: string, online: boolean | null }
   detection: 'events' | 'signature'
+  todayKey: string
   ratedWatts: number
   isDefaultRating: boolean
   state: { running: boolean, sinceTs: number | null, minutes: number }
@@ -101,8 +102,10 @@ const lastRunLabel = computed(() => {
       >
         <div
           class="w-full rounded-sm bg-[#4ad4ff]"
-          :class="{ 'opacity-45': d.day === motor.perDay[motor.perDay.length - 1]?.day }"
-          :style="{ height: `${Math.max((d.minutes / maxDayMinutes) * 48, d.minutes > 0 ? 3 : 1)}px`, opacity: d.minutes > 0 ? undefined : 0.15 }"
+          :style="{
+            height: `${Math.max((d.minutes / maxDayMinutes) * 48, d.minutes > 0 ? 3 : 1)}px`,
+            opacity: d.minutes === 0 ? 0.15 : d.day === motor.todayKey ? 0.45 : 0.88
+          }"
         />
         <span class="microlabel text-dimmed truncate">{{ formatDayShort(d.day).split(' ')[0] }}</span>
       </div>
